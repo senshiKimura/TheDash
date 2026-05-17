@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: file:;"/>
+  <title>TheDash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <img class="app-logo" src="assets/logo.png" alt="logo" />
+      <span class="app-name">TheDash</span>
+    </div>
+    <div class="titlebar-center" id="titlebar-clock"></div>
+    <div class="titlebar-controls">
+      <button class="tb-btn" id="btn-min">─</button>
+      <button class="tb-btn" id="btn-max">□</button>
+      <button class="tb-btn close" id="btn-close">✕</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+      <div class="sidebar-nav">
+        <button class="nav-btn active" data-page="home-v2">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+          <span>Accueil</span>
+        </button>
+        <button class="nav-btn" data-page="projects">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>Projets</span>
+        </button>
+        <button class="nav-btn" data-page="resources">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          <span>Ressources</span>
+        </button>
+        <button class="nav-btn" data-page="notes">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Notes</span>
+        </button>
+      </div>
+      <div class="sidebar-bottom">
+        <div id="sidebar-deadlines"></div>
+        <button class="nav-btn" id="btn-toggle-dark">
+          <svg class="nav-svg" id="dark-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>
+          <span id="dark-mode-label">Mode sombre</span>
+        </button>
+        <button class="nav-btn" id="btn-open-settings">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-2.83 2.83M16.24 16.24l2.83 2.83M4.93 4.93l2.83 2.83M7.76 16.24l-2.83 2.83M22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg>
+          <span>Paramètres</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="content">
+
+      <!-- ═══ ACCUEIL V2 (écran défaut) ═══ -->
+      <section id="page-home-v2" class="page active">
+        <div class="v2-grid">
+
+          <!-- TOP ROW -->
+          <div class="v2-top">
+            <!-- Avatar card -->
+            <div class="v2-avatar-card">
+              <div class="v2-avatar-img-wrap" id="v2-avatar-wrap">
+                <img id="v2-avatar-img" src="assets/figurine.png" alt="Avatar" onerror="this.style.display='none';document.getElementById('v2-avatar-fallback').style.display='flex'"/>
+                <div class="v2-avatar-fallback" id="v2-avatar-fallback">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                </div>
+              </div>
+              <div class="v2-avatar-name" id="v2-user-name">Bonjour !</div>
+              <div class="v2-avatar-date" id="v2-today-date"></div>
+            </div>
+
+            <!-- Info / Agenda panel -->
+            <div class="v2-info-card">
+              <div class="v2-info-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                À venir &amp; alertes
+              </div>
+              <div class="v2-info-list" id="v2-agenda-list">
+                <div class="v2-info-empty">Aucun événement pour le moment</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MIDDLE ROW: Quick notes -->
+          <div class="v2-notes-card">
+            <div class="v2-section-header">
+              <div class="v2-section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Notes rapides
+              </div>
+              <button class="btn-sm" id="v2-btn-add-note">+ Note</button>
+            </div>
+            <div class="v2-notes-grid" id="v2-notes-grid"></div>
+          </div>
+
+          <!-- BOTTOM ROW: All-projects kanban -->
+          <div class="v2-tasks-card">
+            <div class="v2-section-header">
+              <div class="v2-section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                Tâches
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <select id="v2-proj-filter" class="v2-proj-select"><option value="">Tous les projets</option></select>
+                <span class="v2-tasks-total" id="v2-tasks-total"></span>
+              </div>
+            </div>
+            <div class="v2-kanban-row" id="v2-kanban-row">
+              <div class="v2-kcol" id="v2-col-todo">
+                <div class="v2-kcol-header" style="border-color:#f59e0b"><span class="v2-kcol-dot" style="background:#f59e0b"></span>À traiter<span class="v2-kcol-count" id="v2-cnt-todo">0</span></div>
+                <div class="v2-kcol-body" id="v2-body-todo"></div>
+              </div>
+              <div class="v2-kcol" id="v2-col-inprog">
+                <div class="v2-kcol-header" style="border-color:#2563eb"><span class="v2-kcol-dot" style="background:#2563eb"></span>En cours<span class="v2-kcol-count" id="v2-cnt-inprog">0</span></div>
+                <div class="v2-kcol-body" id="v2-body-inprog"></div>
+              </div>
+              <div class="v2-kcol" id="v2-col-urgent">
+                <div class="v2-kcol-header" style="border-color:#ef4444"><span class="v2-kcol-dot" style="background:#ef4444"></span>Urgent<span class="v2-kcol-count" id="v2-cnt-urgent">0</span></div>
+                <div class="v2-kcol-body" id="v2-body-urgent"></div>
+              </div>
+              <div class="v2-kcol" id="v2-col-done">
+                <div class="v2-kcol-header" style="border-color:#10b981"><span class="v2-kcol-dot" style="background:#10b981"></span>Terminé<span class="v2-kcol-count" id="v2-cnt-done">0</span></div>
+                <div class="v2-kcol-body" id="v2-body-done"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ═══ PROJECTS ═══ -->
+      <section id="page-projects" class="page">
+        <div class="page-header">
+          <div><h1>Projets</h1><p class="subtitle">Gérez tous vos projets</p></div>
+          <button class="btn-primary" id="btn-new-project">+ Nouveau projet</button>
+        </div>
+        <div id="group-view-header" style="display:none;align-items:center;gap:12px;margin-bottom:16px">
+          <button class="btn-back" id="btn-back-groups">← Retour</button>
+          <h2 id="group-view-title" style="font-size:18px;font-weight:700;color:var(--text);margin:0"></h2>
+        </div>
+        <div class="filter-bar" id="projects-filter-bar" style="display:none">
+          <button class="filter-btn active" data-filter="all">Tous</button>
+          <button class="filter-btn" data-filter="a-traiter">À traiter</button>
+          <button class="filter-btn" data-filter="en-cours">En cours</button>
+          <button class="filter-btn" data-filter="termine">Terminés</button>
+          <button class="filter-btn" data-filter="urgent">Urgents</button>
+        </div>
+        <div class="projects-grid" id="projects-grid"></div>
+      </section>
+
+      <!-- ═══ DETAIL ═══ -->
+      <section id="page-detail" class="page">
+        <!-- ── Tab bar ── -->
+        <div class="detail-tabbar">
+          <button class="btn-back" id="btn-back">← Retour</button>
+          <div class="detail-tabs">
+            <button class="dtab active" data-tab="resume">Résumé</button>
+            <button class="dtab" data-tab="taches">Tâches</button>
+            <button class="dtab" data-tab="documents">Documents</button>
+            <button class="dtab" data-tab="journal">Journal</button>
+            <button class="dtab" data-tab="tableau">Tableau</button>
+          </div>
+          <div class="detail-tab-actions">
+            <button class="btn-secondary" id="btn-edit-project" style="font-size:13px;padding:7px 16px"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modifier</button>
+            <button class="btn-danger-sm" id="btn-delete-project" title="Supprimer le projet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg></button>
+          </div>
+        </div>
+
+        <!-- ── RÉSUMÉ ── -->
+        <div class="dtab-pane active" id="dtab-resume">
+          <div class="detail-overview">
+            <div class="detail-info-left">
+              <img id="detail-cover-img" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:14px;display:none"/>
+              <div class="detail-title-row">
+                <h1 id="detail-title"></h1>
+                <span class="status-badge" id="detail-status" style="flex-shrink:0;align-self:flex-start"></span>
+              </div>
+              <p id="detail-desc" class="detail-desc"></p>
+              <a id="detail-url" class="detail-url" href="#" style="display:none"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Ouvrir le lien</a>
+            </div>
+            <div class="detail-stats-grid">
+              <div class="detail-stat-box">
+                <div class="dstat-label">Date échéance</div>
+                <div class="dstat-value" id="detail-deadline-info">—</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="dstat-label">Prochaine relance</div>
+                <div class="dstat-value" id="detail-next-reminder">—</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="dstat-label">Tâches à faire</div>
+                <div class="dstat-value" id="detail-tasks-todo">0</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="dstat-label">Tâches en cours</div>
+                <div class="dstat-value" id="detail-tasks-inprog">0</div>
+              </div>
+            </div>
+          </div>
+          <div class="postit-section">
+            <div class="postit-header">
+              <span class="postit-section-title">Notes rapides</span>
+              <button class="btn-sm" id="btn-add-postit">+ Note</button>
+            </div>
+            <div class="postit-board" id="postit-board"></div>
+          </div>
+        </div>
+
+        <!-- ── TÂCHES ── -->
+        <div class="dtab-pane" id="dtab-taches">
+          <div class="kanban-toolbar">
+            <h2 style="font-size:17px;font-weight:700;color:var(--text)">Tâches</h2>
+            <div style="display:flex;gap:8px">
+              <button class="btn-sm" id="btn-manage-cols">⚙ Colonnes</button>
+              <button class="btn-sm" id="btn-add-task">+ Tâche</button>
+            </div>
+          </div>
+          <div class="kanban-board" id="kanban-board"></div>
+        </div>
+
+        <!-- ── DOCUMENTS ── -->
+        <div class="dtab-pane" id="dtab-documents">
+          <div class="section-card">
+            <div class="section-header">
+              <h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg> Documents</h2>
+              <div style="display:flex;gap:8px">
+                <button class="btn-sm" id="btn-add-file"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Fichier(s)</button>
+                <button class="btn-sm" id="btn-add-doc"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Lien/Note</button>
+              </div>
+            </div>
+            <div class="docs-list" id="docs-list"></div>
+          </div>
+        </div>
+
+        <!-- ── JOURNAL ── -->
+        <div class="dtab-pane" id="dtab-journal">
+          <div class="journal-layout">
+            <div class="journal-compose-card">
+              <div class="journal-compose-top">
+                <div class="journal-avatar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </div>
+                <div class="journal-compose-meta">
+                  <span class="journal-compose-label">Journal de projet</span>
+                  <span class="journal-compose-date" id="journal-today"></span>
+                </div>
+              </div>
+              <div class="journal-tags-row" id="journal-tags-row">
+                <button class="journal-tag-btn active" data-tag="">📝 Note</button>
+                <button class="journal-tag-btn" data-tag="info">💡 Info</button>
+                <button class="journal-tag-btn" data-tag="action">⚡ Action</button>
+                <button class="journal-tag-btn" data-tag="progress">🎯 Avancement</button>
+                <button class="journal-tag-btn" data-tag="idea">💭 Idée</button>
+              </div>
+              <textarea id="comment-input" placeholder="Décrivez l'avancement, une décision, un blocage..."></textarea>
+              <div class="journal-compose-footer">
+                <button class="btn-primary" id="btn-add-comment">Publier l'entrée</button>
+              </div>
+            </div>
+            <div class="journal-timeline" id="comments-list"></div>
+          </div>
+          <div class="section-card" style="margin-top:16px">
+            <div class="section-header">
+              <h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg> Relances</h2>
+              <button class="btn-sm" id="btn-add-reminder">+ Ajouter</button>
+            </div>
+            <div id="reminders-list"></div>
+          </div>
+        </div>
+
+        <!-- ── TABLEAU (Whiteboard) ── -->
+        <div class="dtab-pane" id="dtab-tableau">
+          <div class="whiteboard-wrap" id="whiteboard-wrap">
+            <div class="whiteboard-toolbar" id="whiteboard-toolbar">
+              <div class="wb-group">
+                <button class="wb-tool active" data-tool="pen" title="Crayon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="wb-tool" data-tool="line" title="Ligne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="5" y1="19" x2="19" y2="5"/></svg></button>
+                <button class="wb-tool" data-tool="rect" title="Rectangle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+                <button class="wb-tool" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><ellipse cx="12" cy="12" rx="10" ry="6"/></svg></button>
+                <button class="wb-tool" data-tool="text" title="Texte">T</button>
+                <button class="wb-tool" data-tool="eraser" title="Gomme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/><line x1="6.5" y1="17.5" x2="10" y2="21"/></svg></button>
+                <button class="wb-tool" data-tool="image" title="Image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
+              </div>
+              <div class="wb-group">
+                <label class="wb-label">Couleur</label>
+                <input type="color" id="wb-color" value="#1e40af" class="wb-color" title="Couleur"/>
+                <label class="wb-label">Taille</label>
+                <input type="range" id="wb-size" min="1" max="30" value="3" class="wb-size" title="Épaisseur"/>
+                <span id="wb-size-val" class="wb-size-label">3px</span>
+              </div>
+              <div class="wb-group wb-group-actions">
+                <button class="wb-btn" id="wb-undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg> Annuler</button>
+                <button class="wb-btn" id="wb-clear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg> Effacer</button>
+                <button class="wb-btn wb-save-btn" id="wb-save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Sauvegarder</button>
+              </div>
+            </div>
+            <canvas id="whiteboard-canvas" class="whiteboard-canvas"></canvas>
+            <div id="wb-text-overlay" class="wb-text-overlay">
+              <input type="text" id="wb-text-input" placeholder="Tapez votre texte..." autocomplete="off"/>
+              <button id="wb-text-ok" class="wb-btn">✓ OK</button>
+              <button id="wb-text-cancel" class="wb-btn">✕</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ RESOURCES ═══ -->
+      <section id="page-resources" class="page">
+        <div class="res-layout">
+          <aside class="res-cats-panel">
+            <div class="res-cats-header">
+              <span class="res-cats-title">Catégories</span>
+              <button class="icon-btn" id="btn-add-res-cat" title="Nouvelle catégorie">+</button>
+            </div>
+            <button class="res-cat-item active" data-cat="all">
+              <span class="res-cat-dot" style="background:var(--text3)"></span>
+              <span>Toutes</span>
+              <span class="res-cat-count" id="res-cat-count-all"></span>
+            </button>
+            <div id="res-cats-list"></div>
+          </aside>
+          <div class="res-main">
+            <div class="page-header"><div><h1>Ressources</h1><p class="subtitle">Fichiers et liens centralisés</p></div></div>
+            <div class="drop-zone" id="res-drop-zone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;opacity:.4"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+              <p>Glissez des fichiers ici ou cliquez pour sélectionner</p>
+              <span>Tous types de fichiers acceptés</span>
+            </div>
+            <div class="resources-toolbar">
+              <button class="btn-primary" id="btn-pick-files">Ajouter des fichiers</button>
+              <button class="btn-secondary" id="btn-add-url-res">Ajouter une URL</button>
+              <input class="search-input" id="res-search" type="text" placeholder="Rechercher..."/>
+            </div>
+            <div class="resources-grid" id="resources-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ NOTES ═══ -->
+      <section id="page-notes" class="page">
+        <div class="page-header">
+          <div><h1>Notes rapides</h1><p class="subtitle">Vos pensées, idées, mémos</p></div>
+          <button class="btn-primary" id="btn-new-note">+ Nouvelle note</button>
+        </div>
+        <div class="notes-grid" id="notes-grid"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ══ MODAL: Project ══ -->
+  <div class="modal-overlay" id="modal-project">
+    <div class="modal" style="width:560px">
+      <div class="modal-header"><h2 id="modal-proj-title">Nouveau projet</h2><button class="modal-close" id="modal-project-close">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>Titre *</label><input type="text" id="proj-title" placeholder="Nom du projet"/></div>
+          <div class="form-group" style="flex:0 0 160px"><label>Statut</label>
+            <select id="proj-status">
+              <option value="a-traiter">À traiter</option>
+              <option value="en-cours">En cours</option>
+              <option value="termine">Terminé</option>
+            </select>
+          </div>
+        </div>
+        <label>Description</label>
+        <textarea id="proj-desc" placeholder="Description..."></textarea>
+        <div class="form-row">
+          <div class="form-group"><label>URL</label><input type="url" id="proj-url" placeholder="https://..."/></div>
+          <div class="form-group" style="flex:0 0 180px"><label>Deadline</label><input type="date" id="proj-deadline"/></div>
+        </div>
+        <label>Tags (séparés par virgule)</label>
+        <input type="text" id="proj-tags" placeholder="ex: client, urgent, dev"/>
+        <label>Groupe</label>
+        <select id="proj-group"><option value="">— Sans groupe —</option></select>
+        <label>Image de couverture</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn-secondary" id="btn-pick-cover" style="font-size:12px;padding:7px 14px">Choisir…</button>
+          <button type="button" class="btn-sm" id="btn-clear-cover" style="display:none;color:var(--danger)">✕ Retirer</button>
+        </div>
+        <img id="proj-cover-preview" style="max-height:120px;border-radius:8px;object-fit:cover;width:100%;display:none"/>
+        <label>Couleur</label>
+        <div class="color-picker" id="proj-color-picker">
+          <div class="color-opt selected" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed"></div>
+          <div class="color-opt" data-color="#db2777" style="background:#db2777"></div>
+          <div class="color-opt" data-color="#ea580c" style="background:#ea580c"></div>
+          <div class="color-opt" data-color="#16a34a" style="background:#16a34a"></div>
+          <div class="color-opt" data-color="#0891b2" style="background:#0891b2"></div>
+          <div class="color-opt" data-color="#ca8a04" style="background:#ca8a04"></div>
+          <div class="color-opt" data-color="#dc2626" style="background:#dc2626"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-project">Annuler</button>
+        <button class="btn-primary" id="btn-save-project">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Reminder ══ -->
+  <div class="modal-overlay" id="modal-reminder">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Ajouter une relance</h2><button class="modal-close" id="modal-reminder-close">✕</button></div>
+      <div class="modal-body">
+        <label>Type de relance</label>
+        <select id="rem-type">
+          <option value="before">X jours avant l'échéance</option>
+          <option value="daily">Quotidienne (répétée)</option>
+          <option value="once">Une seule fois (date précise)</option>
+        </select>
+        <div id="rem-before-group"><label>Jours avant l'échéance</label><input type="number" id="rem-days-before" value="3" min="1"/></div>
+        <div id="rem-date-group" style="display:none"><label>Date de début / date précise</label><input type="date" id="rem-date"/></div>
+        <label>Message (optionnel)</label>
+        <input type="text" id="rem-message" placeholder="Ex: Relancer le client..."/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-reminder">Annuler</button>
+        <button class="btn-primary" id="btn-save-reminder">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Post-it ══ -->
+  <div class="modal-overlay" id="modal-postit">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Nouvelle note</h2><button class="modal-close" id="modal-postit-close">✕</button></div>
+      <div class="modal-body">
+        <label>Contenu *</label>
+        <textarea id="postit-text" placeholder="Votre note..." style="min-height:90px"></textarea>
+        <label>Couleur</label>
+        <div class="color-picker" id="postit-color-picker" style="margin-top:6px">
+          <div class="color-opt selected" data-color="#fef3c7" style="background:#fef3c7;border:2px solid #ca8a04"></div>
+          <div class="color-opt" data-color="#dbeafe" style="background:#dbeafe;border:2px solid #3b82f6"></div>
+          <div class="color-opt" data-color="#dcfce7" style="background:#dcfce7;border:2px solid #16a34a"></div>
+          <div class="color-opt" data-color="#fce7f3" style="background:#fce7f3;border:2px solid #db2777"></div>
+          <div class="color-opt" data-color="#ede9fe" style="background:#ede9fe;border:2px solid #7c3aed"></div>
+          <div class="color-opt" data-color="#fee2e2" style="background:#fee2e2;border:2px solid #dc2626"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-postit">Annuler</button>
+        <button class="btn-primary" id="btn-save-postit">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Task ══ -->
+  <div class="modal-overlay" id="modal-task">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2 id="modal-task-title">Nouvelle tâche</h2><button class="modal-close" id="modal-task-close">✕</button></div>
+      <div class="modal-body">
+        <label>Titre *</label>
+        <input type="text" id="task-title" placeholder="Titre de la tâche"/>
+        <label>Description</label>
+        <textarea id="task-desc" placeholder="Détails..." style="min-height:60px"></textarea>
+        <div class="form-row">
+          <div class="form-group"><label>Statut</label>
+            <select id="task-status">
+              <option value="todo">À faire</option>
+              <option value="in-progress">En cours</option>
+              <option value="done">Terminé</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Priorité</label>
+            <select id="task-priority">
+              <option value="low">🟢 Basse</option>
+              <option value="medium">🟡 Moyenne</option>
+              <option value="high">🔴 Haute</option>
+            </select>
+          </div>
+        </div>
+        <label>📅 Deadline</label>
+        <input type="date" id="task-deadline"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-task">Annuler</button>
+        <button class="btn-primary" id="btn-save-task">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Doc/Link ══ -->
+  <div class="modal-overlay" id="modal-doc">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Ajouter un lien / note</h2><button class="modal-close" id="modal-doc-close">✕</button></div>
+      <div class="modal-body">
+        <label>Titre *</label><input type="text" id="doc-title" placeholder="Titre"/>
+        <label>Type</label>
+        <select id="doc-type">
+          <option value="lien">🔗 Lien</option>
+          <option value="note">📝 Note</option>
+          <option value="autre">📎 Autre</option>
+        </select>
+        <label>Contenu / URL</label>
+        <textarea id="doc-content" placeholder="URL ou contenu..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-doc">Annuler</button>
+        <button class="btn-primary" id="btn-save-doc">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: URL Resource ══ -->
+  <div class="modal-overlay" id="modal-url-res">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Ajouter une URL</h2><button class="modal-close" id="modal-url-res-close">✕</button></div>
+      <div class="modal-body">
+        <label>Titre *</label><input type="text" id="res-url-title" placeholder="Ex: Documentation React"/>
+        <label>URL *</label><input type="url" id="res-url-value" placeholder="https://..."/>
+        <label>Catégorie</label>
+        <select id="res-category"><option value="">Aucune</option></select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-url-res">Annuler</button>
+        <button class="btn-primary" id="btn-save-url-res">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Note ══ -->
+  <div class="modal-overlay" id="modal-note">
+    <div class="modal" style="width:520px">
+      <div class="modal-header"><h2 id="modal-note-title">Nouvelle note</h2><button class="modal-close" id="modal-note-close">✕</button></div>
+      <div class="modal-body">
+        <label>Titre</label><input type="text" id="note-title" placeholder="Titre (optionnel)"/>
+        <label>Contenu *</label>
+        <textarea id="note-content" placeholder="Votre note..." style="min-height:120px"></textarea>
+        <label>Couleur</label>
+        <div class="color-picker" id="note-color-picker">
+          <div class="color-opt selected" data-color="#fef9c3" style="background:#fef9c3;border:2px solid #ca8a04"></div>
+          <div class="color-opt" data-color="#dbeafe" style="background:#dbeafe;border:2px solid #3b82f6"></div>
+          <div class="color-opt" data-color="#dcfce7" style="background:#dcfce7;border:2px solid #16a34a"></div>
+          <div class="color-opt" data-color="#fce7f3" style="background:#fce7f3;border:2px solid #db2777"></div>
+          <div class="color-opt" data-color="#ffe4e6" style="background:#ffe4e6;border:2px solid #dc2626"></div>
+          <div class="color-opt" data-color="#f3e8ff" style="background:#f3e8ff;border:2px solid #7c3aed"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-note">Annuler</button>
+        <button class="btn-primary" id="btn-save-note">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Confirm ══ -->
+  <div class="modal-overlay" id="modal-confirm">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Confirmer la suppression</h2></div>
+      <div class="modal-body"><p style="color:var(--text2);line-height:1.6" id="confirm-text">Cette action est irréversible.</p></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-delete">Annuler</button>
+        <button class="btn-danger" id="btn-confirm-delete">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Context Menu ══ -->
+  <div id="ctx-menu" class="ctx-menu">
+    <button class="ctx-item" id="ctx-open-folder">Ouvrir le dossier</button>
+    <button class="ctx-item" id="ctx-rename">Renommer</button>
+    <button class="ctx-item ctx-resource-item" id="ctx-assign-cat">Catégorie...</button>
+    <div class="ctx-divider ctx-resource-item"></div>
+    <button class="ctx-item danger ctx-resource-item" id="ctx-delete-res">Supprimer</button>
+    <button class="ctx-item ctx-group-item" id="ctx-edit-group">Modifier le groupe</button>
+    <div class="ctx-divider ctx-group-item"></div>
+    <button class="ctx-item danger ctx-group-item" id="ctx-delete-group">Supprimer le groupe</button>
+  </div>
+
+  <!-- ══ MODAL: Rename ══ -->
+  <div class="modal-overlay" id="modal-rename">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Renommer</h2><button class="modal-close" id="modal-rename-close">✕</button></div>
+      <div class="modal-body">
+        <label>Nouveau nom</label>
+        <input type="text" id="rename-input" placeholder="Nouveau nom..."/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-rename">Annuler</button>
+        <button class="btn-primary" id="btn-save-rename">Renommer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Group ══ -->
+  <div class="modal-overlay" id="modal-group">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2 id="modal-group-title">Nouveau groupe</h2><button class="modal-close" id="modal-group-close">✕</button></div>
+      <div class="modal-body">
+        <label>Nom *</label>
+        <input type="text" id="group-name" placeholder="Ex: Travail, Personnel..."/>
+        <label>Couleur</label>
+        <div class="color-picker" id="group-color-picker">
+          <div class="color-opt selected" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed"></div>
+          <div class="color-opt" data-color="#db2777" style="background:#db2777"></div>
+          <div class="color-opt" data-color="#ea580c" style="background:#ea580c"></div>
+          <div class="color-opt" data-color="#16a34a" style="background:#16a34a"></div>
+          <div class="color-opt" data-color="#0891b2" style="background:#0891b2"></div>
+          <div class="color-opt" data-color="#ca8a04" style="background:#ca8a04"></div>
+          <div class="color-opt" data-color="#dc2626" style="background:#dc2626"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-group">Annuler</button>
+        <button class="btn-primary" id="btn-save-group">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Catégorie ressource ══ -->
+  <div class="modal-overlay" id="modal-res-cat">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Nouvelle catégorie</h2><button class="modal-close" id="modal-res-cat-close">✕</button></div>
+      <div class="modal-body">
+        <label>Nom *</label>
+        <input type="text" id="res-cat-name" placeholder="Ex: Documentation, Outils..."/>
+        <label>Couleur</label>
+        <div class="color-picker" id="res-cat-color-picker">
+          <div class="color-opt selected" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed"></div>
+          <div class="color-opt" data-color="#db2777" style="background:#db2777"></div>
+          <div class="color-opt" data-color="#ea580c" style="background:#ea580c"></div>
+          <div class="color-opt" data-color="#16a34a" style="background:#16a34a"></div>
+          <div class="color-opt" data-color="#0891b2" style="background:#0891b2"></div>
+          <div class="color-opt" data-color="#ca8a04" style="background:#ca8a04"></div>
+          <div class="color-opt" data-color="#dc2626" style="background:#dc2626"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-res-cat">Annuler</button>
+        <button class="btn-primary" id="btn-save-res-cat">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Assigner catégorie ══ -->
+  <div class="modal-overlay" id="modal-assign-cat">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Choisir une catégorie</h2><button class="modal-close" id="modal-assign-cat-close">✕</button></div>
+      <div class="modal-body" id="assign-cat-list" style="display:flex;flex-direction:column;gap:6px">
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Paramètres ══ -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal" style="width:520px">
+      <div class="modal-header">
+        <h2>Paramètres</h2>
+        <button class="modal-close" id="modal-settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Avatar -->
+        <div class="settings-section">
+          <div class="settings-section-title">
+            <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            Avatar
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:10px">
+            <div class="v2-avatar-img-wrap" style="width:80px;height:80px;border-radius:14px;flex-shrink:0">
+              <img id="settings-avatar-preview" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover"/>
+              <div class="v2-avatar-fallback" id="settings-avatar-fallback">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn-primary" id="btn-pick-avatar">Choisir une image</button>
+              <button class="btn-secondary" id="btn-clear-avatar" style="display:none">Supprimer l'avatar</button>
+            </div>
+          </div>
+        </div>
+        <!-- Google Calendar -->
+        <div class="settings-section">
+          </div>
+          <div class="settings-gcal-status">
+            <span class="status-dot disconnected" id="gcal-status-dot"></span>
+            <span id="gcal-status-text">Non connecté</span>
+          </div>
+          <div class="settings-help">
+            1. Allez sur <strong>console.cloud.google.com</strong><br>
+            2. Créez un projet &rarr; APIs &amp; Services &rarr; Identifiants<br>
+            3. Créez un OAuth 2.0 Client (type: Desktop App)<br>
+            4. URI de redirection autorisée&nbsp;: <code>http://localhost:9871/callback</code><br>
+            5. Activez l’API Google Calendar dans la bibliothèque
+          </div>
+          <div id="gcal-creds-form">
+            <label>Client ID</label>
+            <input type="text" id="gcal-client-id" placeholder="123456789-xxxx.apps.googleusercontent.com"/>
+            <label>Client Secret</label>
+            <input type="password" id="gcal-client-secret" placeholder="GOCSPX-..."/>
+          </div>
+          <div class="modal-footer" style="padding:0;margin-top:12px">
+            <button class="btn-secondary" id="btn-gcal-disconnect" style="display:none">Déconnecter</button>
+            <button class="btn-primary" id="btn-gcal-save">Enregistrer &amp; Connecter</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL : Colonnes Kanban ══ -->
+  <div class="modal-overlay" id="modal-task-cols">
+    <div class="modal" style="width:480px">
+      <div class="modal-header"><h2>Gérer les colonnes</h2><button class="modal-close" id="modal-task-cols-close">✕</button></div>
+      <div class="modal-body">
+        <div id="task-cols-list"></div>
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+        <label>Nom de la colonne *</label>
+        <input type="text" id="new-col-name" placeholder="Ex: En révision, Validé, Bloqué..."/>
+        <label>Couleur</label>
+        <div class="color-picker" id="new-col-color-picker">
+          <div class="color-opt selected" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed"></div>
+          <div class="color-opt" data-color="#db2777" style="background:#db2777"></div>
+          <div class="color-opt" data-color="#f59e0b" style="background:#f59e0b"></div>
+          <div class="color-opt" data-color="#10b981" style="background:#10b981"></div>
+          <div class="color-opt" data-color="#ef4444" style="background:#ef4444"></div>
+          <div class="color-opt" data-color="#06b6d4" style="background:#06b6d4"></div>
+          <div class="color-opt" data-color="#64748b" style="background:#64748b"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-task-cols">Fermer</button>
+        <button class="btn-primary" id="btn-save-task-col">+ Ajouter la colonne</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL : Importer un fichier ══ -->
+  <div class="modal-overlay" id="modal-import-file">
+    <div class="modal" style="width:420px">
+      <div class="modal-header"><h2>Importer des fichiers</h2><button class="modal-close" id="modal-import-close">✕</button></div>
+      <div class="modal-body" style="text-align:center;padding:20px 24px">
+        <div style="font-size:44px;margin-bottom:14px">📁</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:6px">Que faire avec</p>
+        <strong id="import-file-count" style="font-size:13px;color:var(--text);word-break:break-all"></strong>
+        <p style="font-size:12px;color:var(--text3);margin-top:12px;line-height:1.6">Choisissez comment intégrer ce(s) fichier(s) à l'application.</p>
+        <div class="import-actions-grid">
+          <button class="import-action-btn" data-action="link">
+            <span class="import-action-icon">🔗</span>
+            <strong>Lier</strong>
+            <span>Garder le fichier à son emplacement d'origine</span>
+          </button>
+          <button class="import-action-btn" data-action="copy">
+            <span class="import-action-icon">📋</span>
+            <strong>Copier</strong>
+            <span>Copier dans le stockage de l'app</span>
+          </button>
+          <button class="import-action-btn" data-action="move">
+            <span class="import-action-icon">📦</span>
+            <strong>Déplacer</strong>
+            <span>Déplacer dans le stockage de l'app</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-cancel-import">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
+

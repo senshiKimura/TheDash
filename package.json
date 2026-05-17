@@ -1,0 +1,50 @@
+{
+  "name": "thedash",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder --win portable"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "electron": "^41.6.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.thedash.app",
+    "productName": "TheDash",
+    "files": [
+      "main.js",
+      "preload.js",
+      "mascot-preload.js",
+      "renderer.js",
+      "index.html",
+      "style.css",
+      "package.json",
+      "assets/**"
+    ],
+    "win": {
+      "icon": "assets/logo.png",
+      "sign": null,
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "TheDash.exe"
+    }
+  },
+  "dependencies": {
+    "googleapis": "^171.4.0"
+  }
+}
