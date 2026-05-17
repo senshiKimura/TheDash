@@ -175,10 +175,29 @@ async function syncItems(clientId, items) {
 
 async function getClientItems(clientId) {
   const [rows] = await pool.execute(
-    'SELECT id, type, item_key, LENGTH(data) AS data_size, updated_at FROM data_items WHERE client_id = ? ORDER BY type, item_key',
+    `SELECT id, type, item_key,
+       COALESCE(JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')), JSON_UNQUOTE(JSON_EXTRACT(data, '$.title')), '') AS item_name,
+       LENGTH(data) AS data_size, updated_at
+     FROM data_items WHERE client_id = ? ORDER BY type, item_key`,
     [clientId],
   );
   return rows;
+}
+
+async function getClientItemsFull(clientId) {
+  const [rows] = await pool.execute(
+    'SELECT id, type, item_key, data, updated_at FROM data_items WHERE client_id = ? ORDER BY type',
+    [clientId],
+  );
+  return rows;
+}
+
+async function deleteDataItem(clientId, itemKey) {
+  await pool.execute('DELETE FROM data_items WHERE client_id = ? AND item_key = ?', [clientId, itemKey]);
+  await pool.execute(
+    'UPDATE clients SET storage_used = (SELECT COALESCE(SUM(LENGTH(data)), 0) FROM data_items WHERE client_id = ?) WHERE id = ?',
+    [clientId, clientId],
+  );
 }
 
 // ─── Archive operations ───────────────────────────────────────────
@@ -260,6 +279,8 @@ module.exports = {
   deleteClientData,
   syncItems,
   getClientItems,
+  getClientItemsFull,
+  deleteDataItem,
   addToArchive,
   getClientArchives,
   getAllArchives,

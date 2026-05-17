@@ -58,6 +58,9 @@ async function init() {
   renderResources();
   renderNotes();
 
+  // Start auto-sync if server is configured
+  startAutoSync();
+
   // Titlebar
   on('btn-min', 'click', () => window.api.windowMinimize());
   on('btn-max', 'click', () => window.api.windowMaximize());
@@ -110,7 +113,10 @@ async function init() {
   on('btn-back', 'click', () => navTo('projects'));
   on('btn-edit-project', 'click', () => { const p = proj(); if (p) openProjectModal(p); });
   on('btn-delete-project', 'click', () => confirmAction('Supprimer ce projet définitivement ?', async () => {
+    const p = projects.find(pr => pr.id === currentProjectId);
+    if (p) await archiveOnServer('project', p);
     projects = await window.api.deleteProject(currentProjectId);
+    scheduleSync();
     renderHome(); renderProjects(); navTo('projects');
   }));
   on('btn-add-task', 'click', () => openTaskModal());
@@ -239,7 +245,12 @@ async function init() {
     hideCtxMenu();
   });
   on('ctx-delete-res', 'click', async () => {
-    if (ctxMenuTarget?.type === 'resource') { resources = await window.api.deleteResource(ctxMenuTarget.data.id); renderResources(q('res-search').value); }
+    if (ctxMenuTarget?.type === 'resource') {
+      await archiveOnServer('resource', ctxMenuTarget.data);
+      resources = await window.api.deleteResource(ctxMenuTarget.data.id);
+      scheduleSync();
+      renderResources(q('res-search').value);
+    }
     hideCtxMenu();
   });
   on('ctx-edit-group', 'click', () => {
@@ -249,10 +260,13 @@ async function init() {
   on('ctx-delete-group', 'click', () => {
     if (ctxMenuTarget?.type === 'group') {
       const gid = ctxMenuTarget.data.id;
+      const grp = ctxMenuTarget.data;
       confirmAction(`Supprimer le groupe "${ctxMenuTarget.data.name}" ?`, async () => {
+        await archiveOnServer('group', grp);
         groups = await window.api.deleteGroup(gid);
         for (const p of projects.filter(pr => pr.groupId === gid)) { p.groupId = null; projects = await window.api.saveProject(p); }
         if (selectedGroupFilter === gid) selectedGroupFilter = 'all';
+        scheduleSync();
         renderProjects();
       });
     }
@@ -965,8 +979,10 @@ async function saveProject() {
     tasks: existing?.tasks || [],
     reminders: existing?.reminders || [],
     createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   projects = await window.api.saveProject(project);
+  scheduleSync();
   closeModal('modal-project');
   renderHome(); renderProjects();
   if (editingProjectId === currentProjectId) openProjectDetail(currentProjectId);
@@ -1007,7 +1023,9 @@ async function saveTask() {
     createdAt: existingTask?.createdAt || new Date().toISOString(),
   };
   if (editingTaskId !== null) p.tasks[editingTaskId] = task; else p.tasks.push(task);
+  p.updatedAt = new Date().toISOString();
   projects = await window.api.saveProject(p);
+  scheduleSync();
   if (task.deadline) await syncToGcal(`Tâche : ${task.title}`, task.description || '', task.deadline);
   closeModal('modal-task');
   renderTasks(p); renderHome(); renderProjects();
@@ -1225,14 +1243,18 @@ function renderResCats() {
 async function saveResCat() {
   const name = q('res-cat-name').value.trim();
   if (!name) { q('res-cat-name').focus(); return; }
-  const cat = { id: uid(), name, color: selectedResCatColor };
+  const cat = { id: uid(), name, color: selectedResCatColor, updatedAt: new Date().toISOString() };
   resCats = await window.api.saveResCat(cat);
+  scheduleSync();
   closeModal('modal-res-cat');
   renderResCats();
 }
 
 async function deleteResCat(catId) {
+  const cat = resCats.find(c => c.id === catId);
+  if (cat) await archiveOnServer('rescat', cat);
   resCats = await window.api.deleteResCat(catId);
+  scheduleSync();
   if (currentResCat === catId) currentResCat = 'all';
   renderResCats();
   renderResources(q('res-search')?.value || '');
@@ -1367,7 +1389,10 @@ function renderNotes() {
   });
   grid.querySelectorAll('.note-del').forEach(el => el.addEventListener('click', async (e) => {
     e.stopPropagation();
+    const note = notes.find(n => n.id === el.dataset.id);
+    if (note) await archiveOnServer('note', note);
     notes = await window.api.deleteNote(el.dataset.id);
+    scheduleSync();
     renderNotes(); renderHome();
   }));
 }
@@ -1395,6 +1420,7 @@ async function saveNote() {
     updatedAt: new Date().toISOString(),
   };
   notes = await window.api.saveNote(note);
+  scheduleSync();
   closeModal('modal-note');
   renderNotes(); renderHome();
 }
@@ -1749,8 +1775,9 @@ function openGroupModal(g = null) {
 async function saveGroup() {
   const name = q('group-name').value.trim();
   if (!name) { q('group-name').focus(); return; }
-  const group = { id: editingGroupId || uid(), name, color: selectedGroupColor };
+  const group = { id: editingGroupId || uid(), name, color: selectedGroupColor, updatedAt: new Date().toISOString() };
   groups = await window.api.saveGroup(group);
+  scheduleSync();
   closeModal('modal-group');
   renderProjects();
 }
@@ -1966,24 +1993,59 @@ async function registerServerClient() {
   }
 }
 
-async function syncToServer() {
-  const base = getServerBase();
+// ══ SYNC SERVEUR ══════════════════════════════════════════════════════════════
+
+let _syncTimer   = null;
+let _isPulling   = false;
+let _deletedIds  = new Set(); // IDs deleted on this PC — never pulled from server
+
+function _getDeletedIds() { return _deletedIds; }
+
+function _persistDeletedIds() {
+  appSettings.deletedItemIds = [..._deletedIds];
+  window.api.saveAppSettings(appSettings);
+}
+
+async function archiveOnServer(type, item) {
+  const base   = getServerBase();
+  const apiKey = appSettings.serverApiKey || '';
+  if (!base || !apiKey || !item) return;
+  _deletedIds.add(item.id);
+  _persistDeletedIds();
+  await window.api.serverRequest({
+    url: `${base}/api/client/archive`,
+    method: 'POST',
+    headers: { 'X-Api-Key': apiKey },
+    body: { type, itemKey: item.id, data: JSON.stringify(item) },
+  });
+}
+
+function scheduleSync() {
+  if (!appSettings.serverApiKey) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => syncToServer(true), 5000);
+}
+
+async function syncToServer(silent = false) {
+  const base   = getServerBase();
   const apiKey = appSettings.serverApiKey || '';
   if (!base || !apiKey) {
-    setServerSyncStatus('⚠ Configurez et testez la connexion d\'abord.');
+    if (!silent) setServerSyncStatus('⚠ Configurez et testez la connexion d\'abord.');
     return;
   }
-  const btn = q('btn-server-sync');
-  if (btn) btn.disabled = true;
-  setServerSyncStatus('Synchronisation en cours…');
+  if (!silent) {
+    const btn = q('btn-server-sync');
+    if (btn) btn.disabled = true;
+    setServerSyncStatus('Synchronisation en cours…');
+  }
 
-  // Build items from all local data
+  // Build items — skip locally deleted items
   const items = [];
-  projects.forEach(p  => items.push({ type: 'project',  key: p.id,  data: JSON.stringify(p)  }));
-  notes.forEach(n    => items.push({ type: 'note',     key: n.id,  data: JSON.stringify(n)  }));
-  resources.forEach(r => items.push({ type: 'resource', key: r.id,  data: JSON.stringify(r)  }));
-  groups.forEach(g   => items.push({ type: 'group',    key: g.id,  data: JSON.stringify(g)  }));
-  resCats.forEach(c  => items.push({ type: 'rescat',   key: c.id,  data: JSON.stringify(c)  }));
+  projects.forEach(p  => { if (!_deletedIds.has(p.id))  items.push({ type: 'project',  key: p.id,  data: JSON.stringify(p)  }); });
+  notes.forEach(n    => { if (!_deletedIds.has(n.id))  items.push({ type: 'note',     key: n.id,  data: JSON.stringify(n)  }); });
+  resources.forEach(r => { if (!_deletedIds.has(r.id))  items.push({ type: 'resource', key: r.id,  data: JSON.stringify(r)  }); });
+  groups.forEach(g   => { if (!_deletedIds.has(g.id))  items.push({ type: 'group',    key: g.id,  data: JSON.stringify(g)  }); });
+  resCats.forEach(c  => { if (!_deletedIds.has(c.id))  items.push({ type: 'rescat',   key: c.id,  data: JSON.stringify(c)  }); });
 
   const res = await window.api.serverRequest({
     url: `${base}/api/client/sync`,
@@ -1991,16 +2053,109 @@ async function syncToServer() {
     headers: { 'X-Api-Key': apiKey },
     body: { items },
   });
-  if (btn) btn.disabled = false;
-  if (res.ok) {
-    const now = new Date().toLocaleTimeString('fr-FR');
-    setServerSyncStatus(`✓ ${items.length} éléments synchronisés à ${now}`);
-    setServerStatus('connected', 'Connecté ✓');
-  } else {
-    setServerSyncStatus(`✗ Erreur sync : ${res.error || res.status}`);
-    setServerStatus('disconnected', 'Erreur de synchronisation');
+
+  if (!silent) {
+    const btn = q('btn-server-sync');
+    if (btn) btn.disabled = false;
+    if (res.ok) {
+      const now = new Date().toLocaleTimeString('fr-FR');
+      setServerSyncStatus(`✓ ${items.length} éléments synchronisés à ${now}`);
+      setServerStatus('connected', 'Connecté ✓');
+    } else {
+      setServerSyncStatus(`✗ Erreur sync : ${res.error || res.status}`);
+      setServerStatus('disconnected', 'Erreur de synchronisation');
+    }
   }
 }
 
+async function pullFromServer() {
+  if (_isPulling) return;
+  const base   = getServerBase();
+  const apiKey = appSettings.serverApiKey || '';
+  if (!base || !apiKey) return;
+  _isPulling = true;
+  try {
+    const res = await window.api.serverRequest({
+      url: `${base}/api/client/sync`,
+      method: 'GET',
+      headers: { 'X-Api-Key': apiKey },
+    });
+    if (!res.ok || !Array.isArray(res.body?.items)) return;
+
+    let changed = false;
+    const updProjects = [...projects];
+    const updNotes    = [...notes];
+    const updResources = [...resources];
+    const updGroups   = [...groups];
+    const updResCats  = [...resCats];
+
+    for (const item of res.body.items) {
+      if (_deletedIds.has(item.item_key)) continue; // deleted locally — skip
+      let data;
+      try { data = JSON.parse(item.data); } catch { continue; }
+      const serverTs = new Date(item.updated_at).getTime();
+
+      switch (item.type) {
+        case 'project': {
+          const idx = updProjects.findIndex(p => p.id === item.item_key);
+          const localTs = idx >= 0 ? new Date(updProjects[idx].updatedAt || updProjects[idx].createdAt || 0).getTime() : 0;
+          if (idx < 0 || serverTs > localTs) { if (idx < 0) updProjects.push(data); else updProjects[idx] = data; changed = true; }
+          break;
+        }
+        case 'note': {
+          const idx = updNotes.findIndex(n => n.id === item.item_key);
+          const localTs = idx >= 0 ? new Date(updNotes[idx].updatedAt || updNotes[idx].createdAt || 0).getTime() : 0;
+          if (idx < 0 || serverTs > localTs) { if (idx < 0) updNotes.push(data); else updNotes[idx] = data; changed = true; }
+          break;
+        }
+        case 'resource': {
+          const idx = updResources.findIndex(r => r.id === item.item_key);
+          const localTs = idx >= 0 ? new Date(updResources[idx].updatedAt || updResources[idx].addedAt || 0).getTime() : 0;
+          if (idx < 0 || serverTs > localTs) { if (idx < 0) updResources.push(data); else updResources[idx] = data; changed = true; }
+          break;
+        }
+        case 'group': {
+          const idx = updGroups.findIndex(g => g.id === item.item_key);
+          const localTs = idx >= 0 ? new Date(updGroups[idx].updatedAt || 0).getTime() : 0;
+          if (idx < 0 || serverTs > localTs) { if (idx < 0) updGroups.push(data); else updGroups[idx] = data; changed = true; }
+          break;
+        }
+        case 'rescat': {
+          const idx = updResCats.findIndex(c => c.id === item.item_key);
+          const localTs = idx >= 0 ? new Date(updResCats[idx].updatedAt || 0).getTime() : 0;
+          if (idx < 0 || serverTs > localTs) { if (idx < 0) updResCats.push(data); else updResCats[idx] = data; changed = true; }
+          break;
+        }
+      }
+    }
+
+    if (changed) {
+      await window.api.bulkSaveAll({
+        projects: updProjects, notes: updNotes, resources: updResources,
+        groups: updGroups, resCats: updResCats,
+      });
+      projects   = updProjects;
+      notes      = updNotes;
+      resources  = updResources;
+      groups     = updGroups;
+      resCats    = updResCats;
+      renderHome(); renderProjects(); renderNotes();
+      renderResCats(); renderResources(q('res-search')?.value || '');
+    }
+  } finally {
+    _isPulling = false;
+  }
+}
+
+function startAutoSync() {
+  if (!appSettings.serverApiKey) return;
+  // Restore deleted IDs from persisted settings
+  _deletedIds = new Set(appSettings.deletedItemIds || []);
+  // Pull immediately on start then every 30s
+  pullFromServer();
+  setInterval(pullFromServer, 30000);
+}
+
 init();
+
 

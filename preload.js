@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   onRemindersChecked: (cb) => ipcRenderer.on('reminders-checked', cb),
   getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
   saveAppSettings: (s) => ipcRenderer.invoke('save-app-settings', s),
+  bulkSaveAll: (data) => ipcRenderer.invoke('bulk-save-all', data),
   serverRequest: (opts) => ipcRenderer.invoke('server-request', opts),
 });
 

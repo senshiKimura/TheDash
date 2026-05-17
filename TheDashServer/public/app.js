@@ -246,7 +246,7 @@ function renderDetailItems(items) {
   tbody.innerHTML = items.map(i => `
     <tr>
       <td>${esc(i.type)}</td>
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.item_key || '—')}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(i.item_key)}">${esc(i.item_name || i.item_key || '—')}</td>
       <td>${fmtBytes(i.data_size)}</td>
       <td>${fmtDate(i.updated_at)}</td>
     </tr>`).join('');

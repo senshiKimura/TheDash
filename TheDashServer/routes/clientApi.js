@@ -59,9 +59,21 @@ router.post('/archive', clientAuth, async (req, res) => {
     const retentionMs = config.archiveRetentionDays * 24 * 60 * 60 * 1000;
     const expiresAt   = new Date(Date.now() + retentionMs).toISOString();
     const archiveId   = await db.addToArchive(req.client.id, originalId, type, itemKey, data, expiresAt);
+    // Remove from active data_items so the item doesn't reappear on pull
+    if (itemKey) await db.deleteDataItem(req.client.id, itemKey);
     res.status(201).json({ ok: true, archiveId });
   } catch (err) {
     res.status(500).json({ error: 'Archive failed' });
+  }
+});
+
+// ─── GET /api/client/sync ─────────────────────────────────────────
+router.get('/sync', clientAuth, async (req, res) => {
+  try {
+    const items = await db.getClientItemsFull(req.client.id);
+    res.json({ items });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch sync data' });
   }
 });
 

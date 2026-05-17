@@ -265,6 +265,16 @@ ipcMain.handle('delete-res-cat', (_, id) => {
   save('res-categories', cats); return cats;
 });
 
+ipcMain.handle('bulk-save-all', (_, data) => {
+  const { projects, notes, resources, groups, resCats } = data || {};
+  if (projects  !== undefined) save('projects',       projects);
+  if (notes     !== undefined) save('notes',          notes);
+  if (resources !== undefined) save('resources',      resources);
+  if (groups    !== undefined) save('groups',         groups);
+  if (resCats   !== undefined) save('res-categories', resCats);
+  return true;
+});
+
 // ── Google Calendar ────────────────────────────────────────────────────────────
 ipcMain.handle('google-status', () => {
   const creds = load('google-creds', null);
