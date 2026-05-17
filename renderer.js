@@ -191,6 +191,14 @@ async function init() {
   on('btn-gcal-save', 'click', saveGcalCreds);
   on('btn-gcal-disconnect', 'click', disconnectGcal);
   window.api.onGoogleAuthSuccess(() => refreshGcalStatus());
+  // Settings tabs
+  document.querySelectorAll('.settings-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchSettingsTab(btn.dataset.stab));
+  });
+  // Server
+  on('btn-server-check', 'click', checkServerConnection);
+  on('btn-server-register', 'click', registerServerClient);
+  on('btn-server-sync', 'click', syncToServer);
   const dz = q('res-drop-zone');
   dz.addEventListener('click', addFilesToResources);
   dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
@@ -1822,6 +1830,36 @@ function openSettings() {
       if (clearBtn) clearBtn.style.display = 'none';
     }
   }
+  // Load server settings
+  const urlInput  = q('server-url');
+  const nameInput = q('server-client-name');
+  const keyInput  = q('server-api-key');
+  if (urlInput)  urlInput.value  = appSettings.serverUrl  || '';
+  if (nameInput) nameInput.value = appSettings.serverClientName || '';
+  if (keyInput)  keyInput.value  = appSettings.serverApiKey || '';
+  // Auto-save server fields on blur
+  if (urlInput && !urlInput._serverBlur) {
+    urlInput._serverBlur = true;
+    urlInput.addEventListener('blur', async () => {
+      appSettings.serverUrl = urlInput.value.trim().replace(/\/$/, '');
+      await window.api.saveAppSettings(appSettings);
+    });
+  }
+  if (nameInput && !nameInput._serverBlur) {
+    nameInput._serverBlur = true;
+    nameInput.addEventListener('blur', async () => {
+      appSettings.serverClientName = nameInput.value.trim();
+      await window.api.saveAppSettings(appSettings);
+    });
+  }
+  if (appSettings.serverApiKey) {
+    setServerStatus('disconnected', 'Non vérifié — cliquez Tester');
+  } else {
+    setServerStatus('disconnected', 'Non configuré');
+  }
+  setServerSyncStatus('');
+  // Reset to first tab
+  switchSettingsTab('general');
   refreshGcalStatus();
   openModal('modal-settings');
 }
@@ -1854,6 +1892,114 @@ async function clearAvatar() {
   const clearBtn = q('btn-clear-avatar');
   if (clearBtn) clearBtn.style.display = 'none';
   renderHomeV2();
+}
+
+// ══ SETTINGS TABS ══════════════════════════════════════════════════
+function switchSettingsTab(tab) {
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b.dataset.stab === tab));
+  document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.toggle('active', p.id === `stab-${tab}`));
+}
+
+// ══ SERVER SYNC ════════════════════════════════════════════════════
+function setServerStatus(state, text) {
+  const dot  = q('server-status-dot');
+  const span = q('server-status-text');
+  if (!dot || !span) return;
+  dot.className = `status-dot ${state}`;
+  span.textContent = text;
+}
+
+function setServerSyncStatus(text) {
+  const el = q('server-sync-status');
+  if (el) el.textContent = text;
+}
+
+function getServerBase() {
+  return (appSettings.serverUrl || '').replace(/\/$/, '');
+}
+
+async function checkServerConnection() {
+  const base = getServerBase();
+  const apiKey = appSettings.serverApiKey || '';
+  if (!base) { setServerStatus('disconnected', 'Entrez une URL de serveur'); return; }
+  if (!apiKey) { setServerStatus('disconnected', 'Clé API manquante'); return; }
+  setServerStatus('checking', 'Vérification…');
+  const res = await window.api.serverRequest({
+    url: `${base}/api/client/heartbeat`,
+    method: 'POST',
+    headers: { 'X-Api-Key': apiKey },
+  });
+  if (res.ok) {
+    setServerStatus('connected', 'Connecté ✓');
+  } else {
+    setServerStatus('disconnected', `Échec — ${res.error || res.status || 'erreur inconnue'}`);
+  }
+}
+
+async function registerServerClient() {
+  const base = (q('server-url')?.value || '').trim().replace(/\/$/, '');
+  const name = (q('server-client-name')?.value || '').trim() || 'TheDash PC';
+  if (!base) { setServerSyncStatus('⚠ Entrez l\'URL du serveur d\'abord.'); return; }
+  const btn = q('btn-server-register');
+  if (btn) btn.disabled = true;
+  setServerStatus('checking', 'Enregistrement…');
+  setServerSyncStatus('');
+  const res = await window.api.serverRequest({
+    url: `${base}/api/client/register`,
+    method: 'POST',
+    body: { name, platform: `Windows / TheDash` },
+  });
+  if (btn) btn.disabled = false;
+  if (res.ok && res.body?.apiKey) {
+    appSettings.serverUrl = base;
+    appSettings.serverApiKey = res.body.apiKey;
+    appSettings.serverClientId = res.body.clientId;
+    appSettings.serverClientName = name;
+    await window.api.saveAppSettings(appSettings);
+    const keyInput = q('server-api-key');
+    if (keyInput) keyInput.value = res.body.apiKey;
+    setServerStatus('connected', 'Client enregistré ✓');
+    setServerSyncStatus(`Client ID : ${res.body.clientId}`);
+  } else {
+    setServerStatus('disconnected', 'Échec de l\'enregistrement');
+    setServerSyncStatus(`Erreur : ${res.error || JSON.stringify(res.body) || res.status}`);
+  }
+}
+
+async function syncToServer() {
+  const base = getServerBase();
+  const apiKey = appSettings.serverApiKey || '';
+  if (!base || !apiKey) {
+    setServerSyncStatus('⚠ Configurez et testez la connexion d\'abord.');
+    return;
+  }
+  const btn = q('btn-server-sync');
+  if (btn) btn.disabled = true;
+  setServerSyncStatus('Synchronisation en cours…');
+
+  // Build items from all local data
+  const items = [];
+  projects.forEach(p  => items.push({ type: 'project',  key: p.id,  data: JSON.stringify(p)  }));
+  notes.forEach(n    => items.push({ type: 'note',     key: n.id,  data: JSON.stringify(n)  }));
+  resources.forEach(r => items.push({ type: 'resource', key: r.id,  data: JSON.stringify(r)  }));
+  groups.forEach(g   => items.push({ type: 'group',    key: g.id,  data: JSON.stringify(g)  }));
+  resCats.forEach(c  => items.push({ type: 'rescat',   key: c.id,  data: JSON.stringify(c)  }));
+
+  const res = await window.api.serverRequest({
+    url: `${base}/api/client/sync`,
+    method: 'POST',
+    headers: { 'X-Api-Key': apiKey },
+    body: { items },
+  });
+  if (btn) btn.disabled = false;
+  if (res.ok) {
+    const now = new Date().toLocaleTimeString('fr-FR');
+    setServerSyncStatus(`✓ ${items.length} éléments synchronisés à ${now}`);
+    setServerStatus('connected', 'Connecté ✓');
+  } else {
+    setServerSyncStatus(`✗ Erreur sync : ${res.error || res.status}`);
+    setServerStatus('disconnected', 'Erreur de synchronisation');
+  }
 }
 
 init();

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TheDashServer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ─── Login screen ─────────────────────────────────────────── -->
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-mark">⬡</span>
+        <h1>TheDashServer</h1>
+      </div>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="password">Admin password</label>
+          <input type="password" id="password" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Sign in</button>
+        <p id="login-error" class="error-msg hidden">Incorrect password.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── App shell ─────────────────────────────────────────────── -->
+  <div id="app" class="app hidden">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-mark">⬡</span>
+        <span>TheDashServer</span>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-page="dashboard" href="#">Dashboard</a>
+        <a class="nav-item" data-page="clients" href="#">Clients</a>
+        <a class="nav-item" data-page="archives" href="#">Archives</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <button id="logout-btn" class="btn btn-ghost btn-sm">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <!-- Dashboard -->
+      <section id="page-dashboard" class="page active">
+        <header class="page-header">
+          <h2>Dashboard</h2>
+          <button id="refresh-dashboard" class="btn btn-ghost btn-sm">↻ Refresh</button>
+        </header>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total clients</div></div>
+          <div class="stat-card accent"><div class="stat-val" id="s-online">—</div><div class="stat-lbl">Online</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-storage">—</div><div class="stat-lbl">Storage used</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-archives">—</div><div class="stat-lbl">Archived items</div></div>
+        </div>
+        <div class="card mt">
+          <div class="card-head">Connected clients</div>
+          <table class="table">
+            <thead><tr><th>Name</th><th>Status</th><th>Last seen</th><th>Storage</th><th>Platform</th></tr></thead>
+            <tbody id="dash-tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Clients -->
+      <section id="page-clients" class="page">
+
+        <!-- List view -->
+        <div id="clients-list">
+          <header class="page-header">
+            <h2>Clients</h2>
+            <button id="refresh-clients" class="btn btn-ghost btn-sm">↻ Refresh</button>
+          </header>
+          <div class="card">
+            <table class="table">
+              <thead><tr><th>Name</th><th>Status</th><th>IP</th><th>Last seen</th><th>Storage</th><th>Platform</th><th>Registered</th><th></th></tr></thead>
+              <tbody id="clients-tbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Detail view -->
+        <div id="client-detail" class="hidden">
+          <header class="page-header">
+            <button id="back-clients" class="btn btn-ghost btn-sm">← Back</button>
+            <h2 id="detail-name">Client</h2>
+            <div class="row-gap">
+              <button id="detail-del-data" class="btn btn-warning btn-sm">Delete data</button>
+              <button id="detail-del-client" class="btn btn-danger btn-sm">Delete client</button>
+            </div>
+          </header>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-val" id="d-status">—</div><div class="stat-lbl">Status</div></div>
+            <div class="stat-card"><div class="stat-val" id="d-storage">—</div><div class="stat-lbl">Storage used</div></div>
+            <div class="stat-card"><div class="stat-val" id="d-items">—</div><div class="stat-lbl">Synced items</div></div>
+            <div class="stat-card"><div class="stat-val" id="d-archives">—</div><div class="stat-lbl">Archives</div></div>
+            <div class="stat-card"><div class="stat-val" id="d-ip">—</div><div class="stat-lbl">IP address</div></div>
+          </div>
+          <div class="card mt">
+            <div class="card-head">Synced items</div>
+            <table class="table">
+              <thead><tr><th>Type</th><th>Key</th><th>Size</th><th>Updated</th></tr></thead>
+              <tbody id="detail-items-tbody"><tr><td colspan="4" class="empty">No items synced</td></tr></tbody>
+            </table>
+          </div>
+          <div class="card mt">
+            <div class="card-head">Archived items</div>
+            <table class="table">
+              <thead><tr><th>Type</th><th>Key</th><th>Deleted</th><th>Expires</th><th></th></tr></thead>
+              <tbody id="detail-archives-tbody"><tr><td colspan="5" class="empty">No archives</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Archives -->
+      <section id="page-archives" class="page">
+        <header class="page-header">
+          <h2>Archives</h2>
+          <div class="row-gap">
+            <select id="arc-filter" class="select"><option value="">All clients</option></select>
+            <button id="purge-btn" class="btn btn-warning btn-sm">Purge expired</button>
+            <button id="refresh-archives" class="btn btn-ghost btn-sm">↻ Refresh</button>
+          </div>
+        </header>
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Type</th><th>Key</th><th>Deleted</th><th>Expires</th><th></th></tr></thead>
+            <tbody id="archives-tbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ─── Confirm modal ─────────────────────────────────────────── -->
+  <div id="modal" class="overlay hidden">
+    <div class="modal-box">
+      <div class="modal-title" id="modal-title">Confirm</div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-foot">
+        <button id="modal-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="modal-ok" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Data preview modal ────────────────────────────────────── -->
+  <div id="data-modal" class="overlay hidden">
+    <div class="modal-box modal-wide">
+      <div class="modal-title">Archived data</div>
+      <div class="modal-body"><pre id="data-preview" class="data-pre"></pre></div>
+      <div class="modal-foot">
+        <button id="data-modal-close" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

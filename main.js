@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, shell, nativeImage } 
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const { google } = require('googleapis');
 
 // Force Windows taskbar to use our icon instead of electron.exe
@@ -193,6 +194,33 @@ ipcMain.handle('import-file', (_, srcPath, action) => {
 
 ipcMain.handle('get-app-settings', () => load('app-settings', {}));
 ipcMain.handle('save-app-settings', (_, s) => { save('app-settings', s); return s; });
+
+// ── TheDashServer HTTP requests (allows self-signed TLS) ────────────────────
+ipcMain.handle('server-request', async (_, { url, method = 'GET', headers = {}, body = null }) => {
+  return new Promise((resolve) => {
+    let parsed;
+    try { parsed = new URL(url); } catch { resolve({ ok: false, error: 'URL invalide' }); return; }
+    const opts = {
+      hostname: parsed.hostname,
+      port: parseInt(parsed.port) || 443,
+      path: parsed.pathname + parsed.search,
+      method,
+      headers: { 'Content-Type': 'application/json', ...headers },
+      rejectUnauthorized: false,
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: data }); }
+      });
+    });
+    req.on('error', (e) => resolve({ ok: false, error: e.message }));
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+});
 
 ipcMain.handle('rename-resource', (_, id, newName) => {
   const res = load('resources', []);
