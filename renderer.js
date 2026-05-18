@@ -148,11 +148,6 @@ async function init() {
     pomSetPhase(btn.dataset.phase);
   }));
 
-  // Liens
-  on('btn-add-link', 'click', openLinksModal);
-  on('modal-links-close', 'click', () => closeModal('modal-links'));
-  on('links-search', 'input', renderLinksSearch);
-
   // Detail
   on('btn-back', 'click', () => navTo('projects'));
   on('btn-edit-project', 'click', () => { const p = proj(); if (p) openProjectModal(p); });
@@ -313,6 +308,28 @@ async function init() {
         scheduleSync();
         renderProjects();
       });
+    }
+    hideCtxMenu();
+  });
+  on('ctx-edit-proj', 'click', () => {
+    if (ctxMenuTarget?.type === 'project') {
+      const p = projects.find(pr => pr.id === ctxMenuTarget.data.id);
+      if (p) openProjectModal(p);
+    }
+    hideCtxMenu();
+  });
+  on('ctx-delete-proj', 'click', () => {
+    if (ctxMenuTarget?.type === 'project') {
+      const id = ctxMenuTarget.data.id;
+      const p = projects.find(pr => pr.id === id);
+      if (p) {
+        confirmAction(`Supprimer le projet "${p.title}" ?`, async () => {
+          await archiveOnServer('project', p);
+          projects = await window.api.deleteProject(id);
+          scheduleSync();
+          renderProjects();
+        });
+      }
     }
     hideCtxMenu();
   });
@@ -702,7 +719,10 @@ function renderProjects() {
       : '<p class="empty-state" style="grid-column:1/-1;padding:40px">Aucun projet dans ce groupe</p>';
   }
 
-  grid.querySelectorAll('.proj-card').forEach(c => c.addEventListener('click', () => openProjectDetail(c.dataset.id)));
+  grid.querySelectorAll('.proj-card').forEach(c => {
+    c.addEventListener('click', () => openProjectDetail(c.dataset.id));
+    c.addEventListener('contextmenu', (e) => { e.preventDefault(); showCtxMenu(e, 'project', { id: c.dataset.id }); });
+  });
 }
 
 function setFilter(filter) {
@@ -764,7 +784,6 @@ function openProjectDetail(idOrObj) {
   renderComments(p);
   renderReminders(p);
   renderPostits(p);
-  renderLinks(p);
 
   switchDetailTab('resume');
   qAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -951,11 +970,12 @@ function renderComments(p) {
           <span class="journal-entry-time">${dateStr} · ${timeStr}</span>
           <button class="comment-del" data-idx="${realIdx}" title="Supprimer">✕</button>
         </div>
-        <div class="journal-entry-text">${escHtml(c.text)}</div>
+        <div class="journal-entry-text">${c.text}</div>
       </div>
     </div>`;
   }).join('');
   list.querySelectorAll('.comment-del').forEach(el => el.addEventListener('click', () => removeComment(parseInt(el.dataset.idx))));
+  bindRichToolbars();
 }
 
 function renderJournalSchema(p, comments, list) {
@@ -990,6 +1010,27 @@ function renderJournalSchema(p, comments, list) {
       confirmAction('Supprimer cette entrée ?', () => removeComment(idx));
     });
   });
+  // Drag-to-pan on schema wrap
+  const wrap = list.querySelector('.journal-schema-wrap');
+  if (wrap) {
+    let isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      isDown = true;
+      wrap.style.cursor = 'grabbing';
+      startX = e.pageX - wrap.offsetLeft;
+      scrollLeft = wrap.scrollLeft;
+      e.preventDefault();
+    });
+    wrap.addEventListener('mouseleave', () => { isDown = false; wrap.style.cursor = 'grab'; });
+    wrap.addEventListener('mouseup', () => { isDown = false; wrap.style.cursor = 'grab'; });
+    wrap.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - wrap.offsetLeft;
+      wrap.scrollLeft = scrollLeft - (x - startX);
+    });
+  }
 }
 
 function renderReminders(p) {
@@ -1227,12 +1268,12 @@ async function removeDoc(idx) {
 
 // ══ COMMENTS ═════════════════════════════════════════════════════════
 async function addComment() {
-  const text = q('comment-input').value.trim();
-  if (!text) { q('comment-input').focus(); return; }
+  const text = getEditorHtml('comment-input');
+  if (!stripHtml(text).trim()) { q('comment-input').focus(); return; }
   const p = proj(); if (!p) return;
   p.comments = p.comments || [];
   p.comments.push({ text, tag: selectedJournalTag, date: new Date().toISOString() });
-  q('comment-input').value = '';
+  setEditorHtml('comment-input', '');
   projects = await window.api.saveProject(p);
   renderComments(p);
 }
@@ -1590,86 +1631,6 @@ function pomSkip() {
   pomAdvancePhase();
 }
 
-// ══ LIENS ════════════════════════════════════════════════════════════
-function openLinksModal() {
-  const p = proj(); if (!p) return;
-  q('links-search').value = '';
-  renderLinksSearch();
-  openModal('modal-links');
-}
-
-function renderLinksSearch() {
-  const p = proj(); if (!p) return;
-  const term = (q('links-search').value || '').toLowerCase();
-  const existing = (p.links || []).map(l => l.id);
-  const results = [];
-  projects.filter(pr => pr.id !== p.id && (!term || pr.title.toLowerCase().includes(term)))
-    .forEach(pr => results.push({ type: 'project', id: pr.id, label: pr.title, icon: '🗂' }));
-  notes.filter(n => !term || n.title?.toLowerCase().includes(term) || n.content?.toLowerCase().includes(term))
-    .forEach(n => results.push({ type: 'note', id: n.id, label: n.title || '(sans titre)', icon: '📝' }));
-  const res = q('links-search-results');
-  if (!results.length) { res.innerHTML = '<div class="links-empty">Aucun résultat</div>'; return; }
-  res.innerHTML = results.slice(0, 30).map(r => {
-    const linked = existing.includes(r.id);
-    return `<div class="link-result-item${linked ? ' already-linked' : ''}" data-type="${r.type}" data-id="${r.id}" data-label="${escHtml(r.label)}">
-      <span class="link-result-icon">${r.icon}</span>
-      <span class="link-result-name">${escHtml(r.label)}</span>
-      <span class="link-result-type">${r.type === 'project' ? 'Projet' : 'Note'}${linked ? ' · déjà lié' : ''}</span>
-    </div>`;
-  }).join('');
-  res.querySelectorAll('.link-result-item:not(.already-linked)').forEach(el => {
-    el.addEventListener('click', async () => {
-      const p2 = proj(); if (!p2) return;
-      p2.links = p2.links || [];
-      if (p2.links.find(l => l.id === el.dataset.id)) return;
-      p2.links.push({ type: el.dataset.type, id: el.dataset.id, label: el.dataset.label });
-      projects = await window.api.saveProject(p2);
-      scheduleSync();
-      closeModal('modal-links');
-      renderLinks(p2);
-    });
-  });
-}
-
-function renderLinks(p) {
-  const list = q('links-list');
-  if (!list) return;
-  const links = p.links || [];
-  if (!links.length) { list.innerHTML = '<span class="links-empty">Aucun lien pour le moment</span>'; return; }
-  list.innerHTML = links.map((l, i) => {
-    const icon = l.type === 'project' ? '🗂' : '📝';
-    return `<span class="link-chip" data-idx="${i}">
-      <span class="link-type-icon">${icon}</span>${escHtml(l.label)}
-      <button class="link-del" data-idx="${i}" title="Supprimer ce lien">✕</button>
-    </span>`;
-  }).join('');
-  list.querySelectorAll('.link-del').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const p2 = proj(); if (!p2) return;
-      p2.links.splice(parseInt(btn.dataset.idx), 1);
-      projects = await window.api.saveProject(p2);
-      scheduleSync();
-      renderLinks(p2);
-    });
-  });
-  list.querySelectorAll('.link-chip').forEach(chip => {
-    chip.addEventListener('click', (e) => {
-      if (e.target.classList.contains('link-del')) return;
-      const idx = parseInt(chip.dataset.idx);
-      const l = p.links[idx];
-      if (!l) return;
-      if (l.type === 'project') {
-        const target = projects.find(pr => pr.id === l.id);
-        if (target) openProjectDetail(target);
-      } else if (l.type === 'note') {
-        const n = notes.find(no => no.id === l.id);
-        if (n) openNoteModal(n);
-      }
-    });
-  });
-}
-
 // ══ HELPERS ══════════════════════════════════════════════════════════
 const q = (id) => document.getElementById(id);
 const qAll = (sel) => document.querySelectorAll(sel);
@@ -1787,11 +1748,16 @@ function showCtxMenu(e, type, data) {
   const menu = q('ctx-menu');
   const isResource = type === 'resource';
   const isGroup = type === 'group';
+  const isProject = type === 'project';
   qAll('.ctx-resource-item').forEach(el => el.style.display = isResource ? '' : 'none');
   qAll('.ctx-group-item').forEach(el => el.style.display = isGroup ? '' : 'none');
+  qAll('.ctx-proj-item').forEach(el => el.style.display = isProject ? '' : 'none');
   if (isResource) {
     q('ctx-open-folder').style.display = data.type === 'file' ? '' : 'none';
     q('ctx-rename').style.display = '';
+  } else {
+    q('ctx-open-folder').style.display = 'none';
+    q('ctx-rename').style.display = 'none';
   }
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
