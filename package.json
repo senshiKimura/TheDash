@@ -25,6 +25,7 @@
       "main.js",
       "preload.js",
       "mascot-preload.js",
+      "mascot.html",
       "renderer.js",
       "index.html",
       "style.css",
