@@ -207,6 +207,7 @@ ipcMain.handle('server-request', async (_, { url, method = 'GET', headers = {}, 
       method,
       headers: { 'Content-Type': 'application/json', ...headers },
       rejectUnauthorized: false,
+      timeout: 7000,
     };
     const req = https.request(opts, (res) => {
       let data = '';
@@ -216,6 +217,7 @@ ipcMain.handle('server-request', async (_, { url, method = 'GET', headers = {}, 
         catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: data }); }
       });
     });
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Timeout' }); });
     req.on('error', (e) => resolve({ ok: false, error: e.message }));
     if (body) req.write(JSON.stringify(body));
     req.end();

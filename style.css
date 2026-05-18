@@ -555,6 +555,36 @@ h1{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em}
 .wb-label{font-size:11px;color:var(--text3);font-weight:500}
 .wb-tool{width:32px;height:32px;border:1.5px solid var(--border);border-radius:7px;background:transparent;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all var(--t);color:var(--text);font-family:inherit}
 .wb-tool:hover{background:var(--bg3);border-color:var(--accent2)}
+
+/* ── Rich Text Editor ───────────────────────────────────────────────────────── */
+.rich-editor-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:4px}
+.rich-toolbar{display:flex;gap:2px;padding:5px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center}
+.rich-toolbar button{background:none;border:1px solid transparent;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--text2);line-height:1.4;font-family:inherit;transition:all .12s}
+.rich-toolbar button:hover{background:var(--bg3);border-color:var(--border);color:var(--text)}
+.rich-toolbar button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rich-sep{width:1px;min-width:1px;background:var(--border);margin:2px 3px;align-self:stretch}
+.rich-content{min-height:120px;padding:10px 12px;outline:none;line-height:1.65;font-size:14px;color:var(--text);cursor:text}
+.rich-content.compact{min-height:60px}
+.rich-content:empty::before{content:attr(data-placeholder);color:var(--text3);pointer-events:none;display:block}
+.rich-content h1{font-size:1.35em;font-weight:700;margin:6px 0 3px}
+.rich-content h2{font-size:1.15em;font-weight:600;margin:4px 0 2px}
+.rich-content ul,.rich-content ol{padding-left:20px;margin:3px 0}
+.rich-content li{margin:2px 0}
+.rich-content a{color:var(--accent)}
+/* note card: render rich html */
+.note-card .note-body p{margin:0;line-height:1.5}
+.note-card .note-body h1{font-size:1.1em;font-weight:700;margin:4px 0 2px}
+.note-card .note-body h2{font-size:1em;font-weight:600;margin:3px 0 1px}
+.note-card .note-body ul,.note-card .note-body ol{padding-left:16px;margin:2px 0}
+
+/* ── Sync mode toggle ───────────────────────────────────────────────────────── */
+.sync-mode-row{display:flex;gap:10px;margin-bottom:14px}
+.sync-mode-row label{display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;font-size:14px;font-weight:600;padding:10px 14px;border:2px solid var(--border);border-radius:10px;flex:1;transition:all .15s}
+.sync-mode-row label:hover{background:var(--bg3)}
+.sync-mode-row label.active{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.sync-mode-row input[type=radio]{display:none}
+#server-fields{transition:opacity .2s}
+#server-fields.disabled{opacity:.4;pointer-events:none;user-select:none}
 .wb-tool.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 6px rgba(37,99,235,.3)}
 .wb-color{width:32px;height:32px;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:transparent}
 .wb-size{width:80px;accent-color:var(--accent);cursor:pointer}

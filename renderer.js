@@ -52,6 +52,10 @@ async function init() {
 
   startClock();
   updateGreeting();
+
+  // Init rich text toolbars
+  bindRichToolbars();
+
   renderHomeV2();
   renderProjects();
   renderResCats();
@@ -548,7 +552,7 @@ function renderHomeList(id, list) {
     const dl = p.deadline ? `<div class="deadline-chip">📅 ${formatDeadlineShort(p.deadline)}</div>` : '';
     return `<div class="proj-card-sm" data-id="${p.id}">
       <h3>${colorDot(p.color)}${escHtml(p.title)}</h3>
-      <p>${escHtml(p.description || 'Aucune description')}</p>${dl}
+      <p>${stripHtml(p.description) || 'Aucune description'}</p>${dl}
     </div>`;
   }).join('');
   el.querySelectorAll('.proj-card-sm').forEach(c => c.addEventListener('click', () => openProjectDetail(c.dataset.id)));
@@ -568,7 +572,7 @@ function projectCardHtml(p) {
     ${cover}
     <h3>${escHtml(p.title)}</h3>
     ${tags ? `<div class="proj-card-tags">${tags}</div>` : ''}
-    <p>${escHtml(p.description || 'Aucune description')}</p>
+    <p>${stripHtml(p.description) || 'Aucune description'}</p>
     <div class="proj-card-footer">
       <span class="status-badge ${p.status}">${statusLabel(p.status)}</span>
       ${dlChip}
@@ -686,7 +690,7 @@ function openProjectDetail(id) {
 
   // Title / status / desc / url
   q('detail-title').textContent = p.title;
-  q('detail-desc').textContent = p.description || '';
+  q('detail-desc').innerHTML = p.description || '<em style="color:var(--text3)">Aucune description</em>';
   const badge = q('detail-status');
   badge.className = `status-badge ${p.status}`;
   badge.textContent = statusLabel(p.status);
@@ -827,7 +831,7 @@ function kanbanTaskCard(t, idx, col) {
       <div class="task-check ${isDone ? 'checked' : ''}" data-idx="${idx}" title="Marquer">${isDone ? '✓' : ''}</div>
       <div class="kanban-task-info">
         <strong class="${isDone ? 'done-text' : ''}">${escHtml(t.title)}</strong>
-        ${t.description ? `<span class="kanban-task-desc">${escHtml(t.description)}</span>` : ''}
+        ${t.description ? `<span class="kanban-task-desc">${escHtml(stripHtml(t.description))}</span>` : ''}
       </div>
     </div>
     <div class="kanban-task-footer">
@@ -932,7 +936,7 @@ function openProjectModal(p = null) {
   editingProjectId = p?.id || null;
   q('modal-proj-title').textContent = p ? 'Modifier le projet' : 'Nouveau projet';
   q('proj-title').value = p?.title || '';
-  q('proj-desc').value = p?.description || '';
+  setEditorHtml('proj-desc', p?.description || '');
   q('proj-url').value = p?.url || '';
   q('proj-status').value = p?.status || 'a-traiter';
   q('proj-deadline').value = p?.deadline || '';
@@ -966,7 +970,7 @@ async function saveProject() {
   const project = {
     id: editingProjectId || uid(),
     title,
-    description: q('proj-desc').value.trim(),
+    description: getEditorHtml('proj-desc'),
     url: q('proj-url').value.trim(),
     status: q('proj-status').value,
     deadline: q('proj-deadline').value || null,
@@ -998,7 +1002,7 @@ function openTaskModal(idx = null, colId = null) {
   else if (!colId) pendingTaskColId = 'col-todo';
   q('modal-task-title').textContent = task ? 'Modifier la tâche' : 'Nouvelle tâche';
   q('task-title').value = task?.title || '';
-  q('task-desc').value = task?.description || '';
+  setEditorHtml('task-desc', task?.description || '');
   q('task-status').value = task?.status || 'todo';
   q('task-priority').value = task?.priority || 'medium';
   q('task-deadline').value = task?.deadline || '';
@@ -1015,7 +1019,7 @@ async function saveTask() {
   const task = {
     id: existingTask?.id || uid(),
     title,
-    description: q('task-desc').value.trim(),
+    description: getEditorHtml('task-desc'),
     status: q('task-status').value,
     priority: q('task-priority').value,
     deadline: q('task-deadline').value || null,
@@ -1375,7 +1379,7 @@ function renderNotes() {
   grid.innerHTML = notes.map(n => `
     <div class="note-card" style="background:${n.color || '#fef9c3'}" data-id="${n.id}">
       ${n.title ? `<h3>${escHtml(n.title)}</h3>` : ''}
-      <p>${escHtml(n.content || '')}</p>
+      <div class="note-body">${n.content || ''}</div>
       <div class="note-date">${formatDate(n.updatedAt || n.createdAt)}</div>
       <button class="note-del" data-id="${n.id}">✕</button>
     </div>
@@ -1401,15 +1405,15 @@ function openNoteModal(note = null) {
   editingNoteId = note?.id || null;
   q('modal-note-title').textContent = note ? 'Modifier la note' : 'Nouvelle note';
   q('note-title').value = note?.title || '';
-  q('note-content').value = note?.content || '';
+  setEditorHtml('note-content', note?.content || '');
   selectedNoteColor = note?.color || '#fef9c3';
   qAll('#note-color-picker .color-opt').forEach(el => el.classList.toggle('selected', el.dataset.color === selectedNoteColor));
   openModal('modal-note');
 }
 
 async function saveNote() {
-  const content = q('note-content').value.trim();
-  if (!content) { q('note-content').focus(); return; }
+  const content = getEditorHtml('note-content');
+  if (!stripHtml(content)) { q('note-content').focus(); return; }
   const existing = editingNoteId ? notes.find(n => n.id === editingNoteId) : null;
   const note = {
     id: editingNoteId || uid(),
@@ -1864,6 +1868,24 @@ function openSettings() {
   if (urlInput)  urlInput.value  = appSettings.serverUrl  || '';
   if (nameInput) nameInput.value = appSettings.serverClientName || '';
   if (keyInput)  keyInput.value  = appSettings.serverApiKey || '';
+
+  // Sync mode toggle
+  const modeVal = appSettings.syncMode || (appSettings.serverApiKey ? 'sync' : 'standalone');
+  const radios = document.querySelectorAll('input[name="sync-mode"]');
+  radios.forEach(r => { r.checked = r.value === modeVal; });
+  updateSyncModeUI(modeVal);
+  if (!document.querySelector('input[name="sync-mode"]')._modeWired) {
+    radios.forEach(r => {
+      r._modeWired = true;
+      r.addEventListener('change', async () => {
+        appSettings.syncMode = r.value;
+        await window.api.saveAppSettings(appSettings);
+        updateSyncModeUI(r.value);
+        if (r.value === 'sync') startAutoSync();
+      });
+    });
+  }
+
   // Auto-save server fields on blur
   if (urlInput && !urlInput._serverBlur) {
     urlInput._serverBlur = true;
@@ -1997,7 +2019,58 @@ async function registerServerClient() {
 
 let _syncTimer   = null;
 let _isPulling   = false;
-let _deletedIds  = new Set(); // IDs deleted on this PC — never pulled from server
+let _deletedIds  = new Set();
+
+function isSyncEnabled() {
+  if (appSettings.syncMode === 'standalone') return false;
+  if (appSettings.syncMode === 'sync') return true;
+  // legacy: if apiKey present, consider sync enabled
+  return !!appSettings.serverApiKey;
+}
+
+function updateSyncModeUI(mode) {
+  const lblStandalone = q('label-standalone');
+  const lblSync       = q('label-sync');
+  const fields        = q('server-fields');
+  if (lblStandalone) lblStandalone.classList.toggle('active', mode === 'standalone');
+  if (lblSync)       lblSync.classList.toggle('active',       mode === 'sync');
+  if (fields)        fields.classList.toggle('disabled',      mode === 'standalone');
+}
+
+// ── Rich text editor helpers ──────────────────────────────────────────────────
+function bindRichToolbars() {
+  document.querySelectorAll('.rich-toolbar').forEach(toolbar => {
+    if (toolbar._bound) return;
+    toolbar._bound = true;
+    toolbar.querySelectorAll('[data-cmd]').forEach(btn => {
+      btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        document.execCommand(btn.dataset.cmd, false, btn.dataset.val || null);
+      });
+    });
+  });
+}
+
+function getEditorHtml(id) {
+  const el = q(id);
+  if (!el) return '';
+  const html = el.innerHTML.trim();
+  // If only contains empty div/br artifacts, return empty
+  if (html === '<br>' || html === '<div><br></div>' || html === '') return '';
+  return html;
+}
+
+function setEditorHtml(id, html) {
+  const el = q(id);
+  if (!el) return;
+  el.innerHTML = html || '';
+}
+
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html || '';
+  return (tmp.textContent || tmp.innerText || '').trim();
+}
 
 function _getDeletedIds() { return _deletedIds; }
 
@@ -2007,26 +2080,30 @@ function _persistDeletedIds() {
 }
 
 async function archiveOnServer(type, item) {
+  if (!isSyncEnabled()) return;
   const base   = getServerBase();
   const apiKey = appSettings.serverApiKey || '';
   if (!base || !apiKey || !item) return;
   _deletedIds.add(item.id);
   _persistDeletedIds();
-  await window.api.serverRequest({
-    url: `${base}/api/client/archive`,
-    method: 'POST',
-    headers: { 'X-Api-Key': apiKey },
-    body: { type, itemKey: item.id, data: JSON.stringify(item) },
-  });
+  try {
+    await window.api.serverRequest({
+      url: `${base}/api/client/archive`,
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey },
+      body: { type, itemKey: item.id, data: JSON.stringify(item) },
+    });
+  } catch { /* fire-and-forget — deletion must not be blocked */ }
 }
 
 function scheduleSync() {
-  if (!appSettings.serverApiKey) return;
+  if (!isSyncEnabled()) return;
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(() => syncToServer(true), 5000);
 }
 
 async function syncToServer(silent = false) {
+  if (!isSyncEnabled()) return;
   const base   = getServerBase();
   const apiKey = appSettings.serverApiKey || '';
   if (!base || !apiKey) {
@@ -2069,7 +2146,7 @@ async function syncToServer(silent = false) {
 }
 
 async function pullFromServer() {
-  if (_isPulling) return;
+  if (_isPulling || !isSyncEnabled()) return;
   const base   = getServerBase();
   const apiKey = appSettings.serverApiKey || '';
   if (!base || !apiKey) return;
@@ -2148,7 +2225,7 @@ async function pullFromServer() {
 }
 
 function startAutoSync() {
-  if (!appSettings.serverApiKey) return;
+  if (!isSyncEnabled()) return;
   // Restore deleted IDs from persisted settings
   _deletedIds = new Set(appSettings.deletedItemIds || []);
   // Pull immediately on start then every 30s

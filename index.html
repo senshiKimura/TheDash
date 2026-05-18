@@ -373,7 +373,21 @@
           </div>
         </div>
         <label>Description</label>
-        <textarea id="proj-desc" placeholder="Description..."></textarea>
+        <div class="rich-editor-wrap">
+          <div class="rich-toolbar" id="proj-desc-toolbar">
+            <button type="button" data-cmd="bold"><b>G</b></button>
+            <button type="button" data-cmd="italic"><i>I</i></button>
+            <button type="button" data-cmd="underline"><u>S</u></button>
+            <span class="rich-sep"></span>
+            <button type="button" data-cmd="formatBlock" data-val="h1">H1</button>
+            <button type="button" data-cmd="formatBlock" data-val="h2">H2</button>
+            <button type="button" data-cmd="formatBlock" data-val="p">¶</button>
+            <span class="rich-sep"></span>
+            <button type="button" data-cmd="insertUnorderedList">• ≡</button>
+            <button type="button" data-cmd="insertOrderedList">1. ≡</button>
+          </div>
+          <div class="rich-content" id="proj-desc" contenteditable="true" data-placeholder="Description..."></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>URL</label><input type="url" id="proj-url" placeholder="https://..."/></div>
           <div class="form-group" style="flex:0 0 180px"><label>Deadline</label><input type="date" id="proj-deadline"/></div>
@@ -462,7 +476,17 @@
         <label>Titre *</label>
         <input type="text" id="task-title" placeholder="Titre de la tâche"/>
         <label>Description</label>
-        <textarea id="task-desc" placeholder="Détails..." style="min-height:60px"></textarea>
+        <div class="rich-editor-wrap">
+          <div class="rich-toolbar" id="task-desc-toolbar">
+            <button type="button" data-cmd="bold"><b>G</b></button>
+            <button type="button" data-cmd="italic"><i>I</i></button>
+            <button type="button" data-cmd="underline"><u>S</u></button>
+            <span class="rich-sep"></span>
+            <button type="button" data-cmd="insertUnorderedList">• ≡</button>
+            <button type="button" data-cmd="insertOrderedList">1. ≡</button>
+          </div>
+          <div class="rich-content compact" id="task-desc" contenteditable="true" data-placeholder="Détails..."></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Statut</label>
             <select id="task-status">
@@ -535,7 +559,21 @@
       <div class="modal-body">
         <label>Titre</label><input type="text" id="note-title" placeholder="Titre (optionnel)"/>
         <label>Contenu *</label>
-        <textarea id="note-content" placeholder="Votre note..." style="min-height:120px"></textarea>
+        <div class="rich-editor-wrap">
+          <div class="rich-toolbar" id="note-content-toolbar">
+            <button type="button" data-cmd="bold"><b>G</b></button>
+            <button type="button" data-cmd="italic"><i>I</i></button>
+            <button type="button" data-cmd="underline"><u>S</u></button>
+            <span class="rich-sep"></span>
+            <button type="button" data-cmd="formatBlock" data-val="h1">H1</button>
+            <button type="button" data-cmd="formatBlock" data-val="h2">H2</button>
+            <button type="button" data-cmd="formatBlock" data-val="p">¶</button>
+            <span class="rich-sep"></span>
+            <button type="button" data-cmd="insertUnorderedList">• ≡</button>
+            <button type="button" data-cmd="insertOrderedList">1. ≡</button>
+          </div>
+          <div class="rich-content" id="note-content" contenteditable="true" data-placeholder="Votre note..."></div>
+        </div>
         <label>Couleur</label>
         <div class="color-picker" id="note-color-picker">
           <div class="color-opt selected" data-color="#fef9c3" style="background:#fef9c3;border:2px solid #ca8a04"></div>
@@ -722,27 +760,39 @@
         <div class="settings-tab-pane" id="stab-serveur">
           <div class="settings-section">
             <div class="settings-section-title">
-              <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-              Synchronisation serveur
+              <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Mode de fonctionnement
             </div>
-            <label>URL du serveur</label>
-            <input type="text" id="server-url" placeholder="https://192.168.1.180:3100"/>
-            <label>Nom de ce client</label>
-            <input type="text" id="server-client-name" placeholder="Mon PC"/>
-            <label>Clé API</label>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input type="password" id="server-api-key" placeholder="Générée après enregistrement" style="flex:1"/>
-              <button class="btn-secondary" id="btn-server-register" style="white-space:nowrap;flex-shrink:0">Enregistrer le client</button>
+            <div class="sync-mode-row">
+              <label id="label-standalone"><input type="radio" name="sync-mode" id="mode-standalone" value="standalone"> 💾 Standalone <span style="font-size:11px;opacity:.7;display:block">Données locales uniquement</span></label>
+              <label id="label-sync"><input type="radio" name="sync-mode" id="mode-sync" value="sync"> 🔄 Synchronisé <span style="font-size:11px;opacity:.7;display:block">Sync avec un serveur</span></label>
             </div>
-            <div class="settings-gcal-status" style="margin-top:4px">
-              <span class="status-dot disconnected" id="server-status-dot"></span>
-              <span id="server-status-text">Non vérifié</span>
+          </div>
+          <div id="server-fields">
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                Synchronisation serveur
+              </div>
+              <label>URL du serveur</label>
+              <input type="text" id="server-url" placeholder="https://192.168.1.180:3100"/>
+              <label>Nom de ce client</label>
+              <input type="text" id="server-client-name" placeholder="Mon PC"/>
+              <label>Clé API</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="password" id="server-api-key" placeholder="Générée après enregistrement" style="flex:1"/>
+                <button class="btn-secondary" id="btn-server-register" style="white-space:nowrap;flex-shrink:0">Enregistrer le client</button>
+              </div>
+              <div class="settings-gcal-status" style="margin-top:4px">
+                <span class="status-dot disconnected" id="server-status-dot"></span>
+                <span id="server-status-text">Non vérifié</span>
+              </div>
+              <div class="modal-footer" style="padding:0;margin-top:4px">
+                <button class="btn-secondary" id="btn-server-check">Tester la connexion</button>
+                <button class="btn-primary" id="btn-server-sync">Synchroniser maintenant</button>
+              </div>
+              <div id="server-sync-status" style="font-size:12px;color:var(--text3);margin-top:8px;min-height:16px;line-height:1.5"></div>
             </div>
-            <div class="modal-footer" style="padding:0;margin-top:4px">
-              <button class="btn-secondary" id="btn-server-check">Tester la connexion</button>
-              <button class="btn-primary" id="btn-server-sync">Synchroniser maintenant</button>
-            </div>
-            <div id="server-sync-status" style="font-size:12px;color:var(--text3);margin-top:8px;min-height:16px;line-height:1.5"></div>
           </div>
         </div>
       </div>
