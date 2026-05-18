@@ -1,0 +1,9 @@
+# Force LF line endings for shell scripts (required on Linux)
+*.sh text eol=lf
+
+# Windows files keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Auto-detect everything else
+* text=auto
