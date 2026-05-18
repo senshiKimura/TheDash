@@ -46,6 +46,10 @@
       </div>
       <div class="sidebar-bottom">
         <div id="sidebar-deadlines"></div>
+        <button class="nav-btn" id="btn-pomodoro" title="Pomodoro">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+          <span>Pomodoro</span>
+        </button>
         <button class="nav-btn" id="btn-toggle-dark">
           <svg class="nav-svg" id="dark-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>
           <span id="dark-mode-label">Mode sombre</span>
@@ -213,6 +217,15 @@
             </div>
             <div class="postit-board" id="postit-board"></div>
           </div>
+
+          <!-- ── Liens entre éléments ── -->
+          <div class="section-card links-section">
+            <div class="section-header">
+              <h2><svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Liens</h2>
+              <button class="btn-sm" id="btn-add-link">+ Lier</button>
+            </div>
+            <div class="links-list" id="links-list"></div>
+          </div>
         </div>
 
         <!-- ── TÂCHES ── -->
@@ -259,10 +272,16 @@
                 <button class="journal-tag-btn" data-tag="info">💡 Info</button>
                 <button class="journal-tag-btn" data-tag="action">⚡ Action</button>
                 <button class="journal-tag-btn" data-tag="progress">🎯 Avancement</button>
+                <button class="journal-tag-btn" data-tag="decision">◆ Décision</button>
+                <button class="journal-tag-btn" data-tag="cr">📋 CR</button>
                 <button class="journal-tag-btn" data-tag="idea">💭 Idée</button>
               </div>
               <textarea id="comment-input" placeholder="Décrivez l'avancement, une décision, un blocage..."></textarea>
               <div class="journal-compose-footer">
+                <div class="journal-view-toggle">
+                  <button class="jview-btn active" id="btn-journal-list" title="Vue liste">☰ Liste</button>
+                  <button class="jview-btn" id="btn-journal-schema" title="Vue schéma">◈ Schéma</button>
+                </div>
                 <button class="btn-primary" id="btn-add-comment">Publier l'entrée</button>
               </div>
             </div>
@@ -855,6 +874,52 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="btn-cancel-import">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ POMODORO WIDGET ═══ -->
+  <div id="pomodoro-widget" class="pomodoro-widget hidden">
+    <div class="pom-header">
+      <span class="pom-title">🍅 Pomodoro</span>
+      <div class="pom-phases">
+        <button class="pom-phase-btn active" data-phase="work">Travail</button>
+        <button class="pom-phase-btn" data-phase="break">Pause</button>
+      </div>
+      <button class="pom-close-btn" id="pom-close">✕</button>
+    </div>
+    <div class="pom-body">
+      <div class="pom-ring-wrap">
+        <svg class="pom-ring-svg" viewBox="0 0 120 120">
+          <circle class="pom-ring-track" cx="60" cy="60" r="52"/>
+          <circle class="pom-ring-prog" cx="60" cy="60" r="52" id="pom-ring-prog"/>
+        </svg>
+        <div class="pom-time-overlay">
+          <span id="pom-time">25:00</span>
+          <span id="pom-phase-label" class="pom-phase-label">Travail</span>
+        </div>
+      </div>
+      <div class="pom-session-row">
+        <span id="pom-sessions">🍅 × 0</span>
+      </div>
+    </div>
+    <div class="pom-controls">
+      <button id="pom-reset" class="pom-ctrl-btn" title="Réinitialiser">↺</button>
+      <button id="pom-start" class="pom-ctrl-btn pom-main-btn">▶ Démarrer</button>
+      <button id="pom-skip" class="pom-ctrl-btn" title="Sauter">⏭</button>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL LIENS ═══ -->
+  <div class="modal-overlay" id="modal-links">
+    <div class="modal-card" style="max-width:500px">
+      <div class="modal-header">
+        <h2>Lier un élément</h2>
+        <button class="modal-close" id="modal-links-close">✕</button>
+      </div>
+      <div style="padding:0 24px 8px">
+        <input type="text" id="links-search" placeholder="Rechercher un projet ou une note..." class="form-input" style="margin-bottom:12px" autocomplete="off"/>
+        <div id="links-search-results" class="links-search-results"></div>
       </div>
     </div>
   </div>

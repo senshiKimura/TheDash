@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, nativeImage, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -39,6 +39,28 @@ function save(name, data) { fs.writeFileSync(dataFile(name), JSON.stringify(data
 
 // ── Window ───────────────────────────────────────────────────────────────────
 let mainWin;
+let tray = null;
+
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'logo.png'));
+  const trayIcon = process.platform === 'win32' ? icon.resize({ width: 16, height: 16 }) : icon;
+  tray = new Tray(trayIcon);
+  tray.setToolTip('TheDash');
+  const buildMenu = () => Menu.buildFromTemplate([
+    {
+      label: mainWin?.isVisible() ? 'Masquer TheDash' : 'Afficher TheDash',
+      click: () => { if (mainWin?.isVisible()) mainWin.hide(); else { mainWin.show(); mainWin.focus(); } },
+    },
+    { type: 'separator' },
+    { label: 'Quitter', click: () => { app.isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(buildMenu());
+  tray.on('click', () => {
+    if (mainWin?.isVisible()) { mainWin.focus(); } else { mainWin.show(); mainWin.focus(); }
+    tray.setContextMenu(buildMenu());
+  });
+  tray.on('right-click', () => tray.setContextMenu(buildMenu()));
+}
 
 function createWindow() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'logo.png'));
@@ -54,9 +76,10 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   startReminderLoop();
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' && app.isQuitting) app.quit(); });
 
 // ── Reminder loop ─────────────────────────────────────────────────────────────
 function startReminderLoop() {

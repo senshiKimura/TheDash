@@ -20,7 +20,13 @@ let pendingImportCallback = null;
 let pendingTaskColId = 'col-todo';
 let selectedColColor = '#2563eb';
 let selectedJournalTag = '';
+let journalView = 'list'; // 'list' | 'schema'
 let appSettings = {};
+
+// Pomodoro state
+let pomState = { phase: 'work', running: false, sessionCount: 0, intervalId: null };
+const POM_DURATIONS = { work: 25 * 60, break: 5 * 60, longBreak: 15 * 60 };
+let pomSecondsLeft = POM_DURATIONS.work;
 
 const DEFAULT_TASK_COLS = [
   { id: 'col-todo',   name: 'À faire',  color: '#f59e0b' },
@@ -29,11 +35,13 @@ const DEFAULT_TASK_COLS = [
 ];
 
 const JOURNAL_TAGS = {
-  '':        { label: 'Note',       icon: '📝', color: '#64748b' },
-  'info':    { label: 'Info',       icon: '💡', color: '#2563eb' },
-  'action':  { label: 'Action',     icon: '⚡', color: '#f59e0b' },
-  'progress':{ label: 'Avancement', icon: '🎯', color: '#10b981' },
-  'idea':    { label: 'Idée',       icon: '💭', color: '#7c3aed' },
+  '':          { label: 'Note',       icon: '📝', color: '#64748b' },
+  'info':      { label: 'Info',       icon: '💡', color: '#2563eb' },
+  'action':    { label: 'Action',     icon: '⚡', color: '#f59e0b' },
+  'progress':  { label: 'Avancement', icon: '🎯', color: '#10b981' },
+  'decision':  { label: 'Décision',   icon: '◆',  color: '#d97706' },
+  'cr':        { label: 'CR',         icon: '📋', color: '#059669' },
+  'idea':      { label: 'Idée',       icon: '💭', color: '#7c3aed' },
 };
 
 function getTaskCols(p) {
@@ -55,6 +63,9 @@ async function init() {
 
   // Init rich text toolbars
   bindRichToolbars();
+
+  // Init Pomodoro display
+  pomUpdateUI();
 
   renderHomeV2();
   renderProjects();
@@ -112,6 +123,35 @@ async function init() {
     qAll('.journal-tag-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   }));
+
+  // Journal view toggle
+  on('btn-journal-list', 'click', () => {
+    journalView = 'list';
+    q('btn-journal-list').classList.add('active');
+    q('btn-journal-schema').classList.remove('active');
+    const p = proj(); if (p) renderComments(p);
+  });
+  on('btn-journal-schema', 'click', () => {
+    journalView = 'schema';
+    q('btn-journal-schema').classList.add('active');
+    q('btn-journal-list').classList.remove('active');
+    const p = proj(); if (p) renderComments(p);
+  });
+
+  // Pomodoro
+  on('btn-pomodoro', 'click', togglePomodoro);
+  on('pom-close', 'click', () => q('pomodoro-widget').classList.add('hidden'));
+  on('pom-start', 'click', pomToggleRunning);
+  on('pom-reset', 'click', pomReset);
+  on('pom-skip', 'click', pomSkip);
+  qAll('.pom-phase-btn').forEach(btn => btn.addEventListener('click', () => {
+    pomSetPhase(btn.dataset.phase);
+  }));
+
+  // Liens
+  on('btn-add-link', 'click', openLinksModal);
+  on('modal-links-close', 'click', () => closeModal('modal-links'));
+  on('links-search', 'input', renderLinksSearch);
 
   // Detail
   on('btn-back', 'click', () => navTo('projects'));
@@ -678,7 +718,8 @@ function switchDetailTab(tab) {
   if (tab === 'tableau') requestAnimationFrame(initWhiteboard);
 }
 
-function openProjectDetail(id) {
+function openProjectDetail(idOrObj) {
+  const id = typeof idOrObj === 'object' ? idOrObj.id : idOrObj;
   currentProjectId = id;
   const p = projects.find(p => p.id === id);
   if (!p) return;
@@ -723,6 +764,7 @@ function openProjectDetail(id) {
   renderComments(p);
   renderReminders(p);
   renderPostits(p);
+  renderLinks(p);
 
   switchDetailTab('resume');
   qAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -890,6 +932,10 @@ function renderComments(p) {
     </div>`;
     return;
   }
+  if (journalView === 'schema') {
+    renderJournalSchema(p, comments, list);
+    return;
+  }
   list.innerHTML = [...comments].reverse().map((c, i) => {
     const realIdx = comments.length - 1 - i;
     const tag = JOURNAL_TAGS[c.tag] || JOURNAL_TAGS[''];
@@ -910,6 +956,40 @@ function renderComments(p) {
     </div>`;
   }).join('');
   list.querySelectorAll('.comment-del').forEach(el => el.addEventListener('click', () => removeComment(parseInt(el.dataset.idx))));
+}
+
+function renderJournalSchema(p, comments, list) {
+  // Chronological order (oldest left → newest right)
+  const sorted = [...comments].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const CIRC = 326.73; // 2πr where r=52
+  list.innerHTML = `<div class="journal-schema-wrap">
+    <div class="journal-schema-track">
+      <div class="journal-schema-axis"></div>
+      ${sorted.map((c, i) => {
+        const tag = JOURNAL_TAGS[c.tag] || JOURNAL_TAGS[''];
+        const pos = i % 2 === 0 ? 'schema-node-above' : 'schema-node-below';
+        const d = new Date(c.date);
+        const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+        const typeClass = c.tag ? `type-${c.tag}` : '';
+        return `<div class="schema-node ${pos}">
+          <div class="schema-card ${typeClass}" data-idx="${comments.indexOf(c)}" title="${escHtml(c.text)}">
+            <div class="schema-card-tag" style="background:${tag.color}22;color:${tag.color}">${tag.icon} ${tag.label}</div>
+            <div class="schema-card-text">${escHtml(c.text)}</div>
+            <div class="schema-card-date">${dateStr}</div>
+          </div>
+          <div class="schema-stem"></div>
+          <div class="schema-dot" style="background:${tag.color}"></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+  list.querySelectorAll('.schema-card').forEach(card => {
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const idx = parseInt(card.dataset.idx);
+      confirmAction('Supprimer cette entrée ?', () => removeComment(idx));
+    });
+  });
 }
 
 function renderReminders(p) {
@@ -982,6 +1062,10 @@ async function saveProject() {
     comments: existing?.comments || [],
     tasks: existing?.tasks || [],
     reminders: existing?.reminders || [],
+    links: existing?.links || [],
+    postits: existing?.postits || [],
+    taskColumns: existing?.taskColumns,
+    whiteboard: existing?.whiteboard,
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1427,6 +1511,163 @@ async function saveNote() {
   scheduleSync();
   closeModal('modal-note');
   renderNotes(); renderHome();
+}
+
+// ══ POMODORO ═════════════════════════════════════════════════════════
+function togglePomodoro() {
+  q('pomodoro-widget').classList.toggle('hidden');
+}
+
+function pomFmt(secs) {
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function pomUpdateUI() {
+  const totalSecs = pomState.phase === 'work' ? POM_DURATIONS.work
+    : (pomState.sessionCount > 0 && pomState.sessionCount % 4 === 0 ? POM_DURATIONS.longBreak : POM_DURATIONS.break);
+  const CIRC = 326.73;
+  const progress = pomSecondsLeft / totalSecs;
+  q('pom-time').textContent = pomFmt(pomSecondsLeft);
+  q('pom-ring-prog').style.strokeDashoffset = CIRC * (1 - progress);
+  q('pom-ring-prog').classList.toggle('break-mode', pomState.phase !== 'work');
+  q('pom-phase-label').textContent = pomState.phase === 'work' ? 'Travail' : 'Pause';
+  q('pom-sessions').textContent = `🍅 × ${pomState.sessionCount}`;
+  q('pom-start').textContent = pomState.running ? '⏸ Pause' : '▶ Démarrer';
+  q('pom-start').classList.toggle('running', pomState.running);
+  qAll('.pom-phase-btn').forEach(b => b.classList.toggle('active', b.dataset.phase === pomState.phase));
+}
+
+function pomToggleRunning() {
+  if (pomState.running) {
+    clearInterval(pomState.intervalId);
+    pomState.running = false;
+  } else {
+    pomState.running = true;
+    pomState.intervalId = setInterval(() => {
+      pomSecondsLeft--;
+      if (pomSecondsLeft <= 0) pomAdvancePhase();
+      pomUpdateUI();
+    }, 1000);
+  }
+  pomUpdateUI();
+}
+
+function pomAdvancePhase() {
+  clearInterval(pomState.intervalId);
+  pomState.running = false;
+  if (pomState.phase === 'work') {
+    pomState.sessionCount++;
+    pomSetPhase('break');
+    new Notification('🍅 Session terminée !', { body: `Pause méritée. Sessions : ${pomState.sessionCount}` });
+  } else {
+    pomSetPhase('work');
+    new Notification('⏰ Pause terminée !', { body: 'Prêt pour une nouvelle session ?' });
+  }
+}
+
+function pomSetPhase(phase) {
+  clearInterval(pomState.intervalId);
+  pomState.running = false;
+  pomState.phase = phase;
+  const isLongBreak = phase === 'break' && pomState.sessionCount > 0 && pomState.sessionCount % 4 === 0;
+  pomSecondsLeft = phase === 'work' ? POM_DURATIONS.work : (isLongBreak ? POM_DURATIONS.longBreak : POM_DURATIONS.break);
+  pomUpdateUI();
+}
+
+function pomReset() {
+  clearInterval(pomState.intervalId);
+  pomState.running = false;
+  pomSecondsLeft = pomState.phase === 'work' ? POM_DURATIONS.work : POM_DURATIONS.break;
+  pomUpdateUI();
+}
+
+function pomSkip() {
+  clearInterval(pomState.intervalId);
+  pomState.running = false;
+  pomSecondsLeft = 0;
+  pomAdvancePhase();
+}
+
+// ══ LIENS ════════════════════════════════════════════════════════════
+function openLinksModal() {
+  const p = proj(); if (!p) return;
+  q('links-search').value = '';
+  renderLinksSearch();
+  openModal('modal-links');
+}
+
+function renderLinksSearch() {
+  const p = proj(); if (!p) return;
+  const term = (q('links-search').value || '').toLowerCase();
+  const existing = (p.links || []).map(l => l.id);
+  const results = [];
+  projects.filter(pr => pr.id !== p.id && (!term || pr.title.toLowerCase().includes(term)))
+    .forEach(pr => results.push({ type: 'project', id: pr.id, label: pr.title, icon: '🗂' }));
+  notes.filter(n => !term || n.title?.toLowerCase().includes(term) || n.content?.toLowerCase().includes(term))
+    .forEach(n => results.push({ type: 'note', id: n.id, label: n.title || '(sans titre)', icon: '📝' }));
+  const res = q('links-search-results');
+  if (!results.length) { res.innerHTML = '<div class="links-empty">Aucun résultat</div>'; return; }
+  res.innerHTML = results.slice(0, 30).map(r => {
+    const linked = existing.includes(r.id);
+    return `<div class="link-result-item${linked ? ' already-linked' : ''}" data-type="${r.type}" data-id="${r.id}" data-label="${escHtml(r.label)}">
+      <span class="link-result-icon">${r.icon}</span>
+      <span class="link-result-name">${escHtml(r.label)}</span>
+      <span class="link-result-type">${r.type === 'project' ? 'Projet' : 'Note'}${linked ? ' · déjà lié' : ''}</span>
+    </div>`;
+  }).join('');
+  res.querySelectorAll('.link-result-item:not(.already-linked)').forEach(el => {
+    el.addEventListener('click', async () => {
+      const p2 = proj(); if (!p2) return;
+      p2.links = p2.links || [];
+      if (p2.links.find(l => l.id === el.dataset.id)) return;
+      p2.links.push({ type: el.dataset.type, id: el.dataset.id, label: el.dataset.label });
+      projects = await window.api.saveProject(p2);
+      scheduleSync();
+      closeModal('modal-links');
+      renderLinks(p2);
+    });
+  });
+}
+
+function renderLinks(p) {
+  const list = q('links-list');
+  if (!list) return;
+  const links = p.links || [];
+  if (!links.length) { list.innerHTML = '<span class="links-empty">Aucun lien pour le moment</span>'; return; }
+  list.innerHTML = links.map((l, i) => {
+    const icon = l.type === 'project' ? '🗂' : '📝';
+    return `<span class="link-chip" data-idx="${i}">
+      <span class="link-type-icon">${icon}</span>${escHtml(l.label)}
+      <button class="link-del" data-idx="${i}" title="Supprimer ce lien">✕</button>
+    </span>`;
+  }).join('');
+  list.querySelectorAll('.link-del').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const p2 = proj(); if (!p2) return;
+      p2.links.splice(parseInt(btn.dataset.idx), 1);
+      projects = await window.api.saveProject(p2);
+      scheduleSync();
+      renderLinks(p2);
+    });
+  });
+  list.querySelectorAll('.link-chip').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      if (e.target.classList.contains('link-del')) return;
+      const idx = parseInt(chip.dataset.idx);
+      const l = p.links[idx];
+      if (!l) return;
+      if (l.type === 'project') {
+        const target = projects.find(pr => pr.id === l.id);
+        if (target) openProjectDetail(target);
+      } else if (l.type === 'note') {
+        const n = notes.find(no => no.id === l.id);
+        if (n) openNoteModal(n);
+      }
+    });
+  });
 }
 
 // ══ HELPERS ══════════════════════════════════════════════════════════
