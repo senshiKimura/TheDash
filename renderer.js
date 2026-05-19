@@ -22,6 +22,8 @@ let selectedColColor = '#2563eb';
 let selectedJournalTag = '';
 let journalView = 'list'; // 'list' | 'schema'
 let appSettings = {};
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
 
 // Pomodoro state
 let pomState = { phase: 'work', running: false, sessionCount: 0, intervalId: null };
@@ -87,6 +89,19 @@ async function init() {
     btn.classList.add('active');
     showPage(btn.dataset.page);
   }));
+
+  // Calendrier nav
+  on('cal-prev', 'click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
+  on('cal-next', 'click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
+
+  // Multi-fenêtre
+  on('ctx-window-proj', 'click', () => {
+    if (ctxMenuTarget?.type === 'project') window.api.openProjectWindow(ctxMenuTarget.data.id);
+    hideCtxMenu();
+  });
+  if (window.api.onGotoProject) {
+    window.api.onGotoProject((id) => openProjectDetail(id));
+  }
 
   // Home stat cards → filter
   qAll('.stat-card').forEach(card => {
@@ -453,6 +468,7 @@ function showPage(name) {
   const pageEl = document.getElementById(`page-${name}`);
   if (pageEl) pageEl.classList.add('active');
   if (name === 'home-v2') renderHomeV2();
+  if (name === 'calendar') renderCalendar();
 }
 
 function navTo(page) {
@@ -464,6 +480,63 @@ function navTo(page) {
 
 // ══ HOME (V1 supprimé — stub pour compatibilité appels internes) ═══════════
 function renderHome() { renderHomeV2(); }
+
+// ══ CALENDRIER ════════════════════════════════════════════════════════
+function getCalendarEvents(year, month) {
+  const events = [];
+  for (const p of projects) {
+    if (p.deadline) {
+      const d = new Date(p.deadline + 'T00:00:00');
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        events.push({ date: p.deadline, type: 'deadline', label: p.title, color: p.color || '#ef4444', projectId: p.id });
+      }
+    }
+    for (const r of (p.reminders || [])) {
+      if (r.type === 'once' && r.date && r.enabled) {
+        const d = new Date(r.date + 'T00:00:00');
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          events.push({ date: r.date, type: 'reminder', label: r.message || p.title, color: '#f59e0b', projectId: p.id });
+        }
+      }
+    }
+  }
+  return events;
+}
+
+function renderCalendar() {
+  const grid = q('cal-grid');
+  const label = q('cal-month-label');
+  if (!grid) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const firstDay = new Date(calYear, calMonth, 1);
+  const lastDay = new Date(calYear, calMonth + 1, 0);
+  const startPad = (firstDay.getDay() + 6) % 7; // Monday-first
+  if (label) label.textContent = firstDay.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  const events = getCalendarEvents(calYear, calMonth);
+  const byDate = {};
+  for (const e of events) { byDate[e.date] = byDate[e.date] || []; byDate[e.date].push(e); }
+
+  const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  let html = dayNames.map(d => `<div class="cal-day-header">${d}</div>`).join('');
+  for (let i = 0; i < startPad; i++) html += '<div class="cal-cell cal-cell-other"></div>';
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const isToday = dateStr === today;
+    const dayEvents = byDate[dateStr] || [];
+    html += `<div class="cal-cell${isToday ? ' cal-today' : ''}">
+      <div class="cal-day-num${isToday ? ' cal-today-num' : ''}">${d}</div>
+      ${dayEvents.slice(0, 3).map(e =>
+        `<div class="cal-event" style="background:${e.color}22;border-left:3px solid ${e.color}" data-pid="${escHtml(e.projectId)}" title="${escHtml(e.label)}">${escHtml(e.label.slice(0, 22))}</div>`
+      ).join('')}
+      ${dayEvents.length > 3 ? `<div class="cal-event-more">+${dayEvents.length - 3} autre${dayEvents.length - 3 > 1 ? 's' : ''}</div>` : ''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cal-event[data-pid]').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); openProjectDetail(el.dataset.pid); });
+  });
+}
 
 // ══ HOME V2 ══════════════════════════════════════════════════════════
 function renderHomeV2() {

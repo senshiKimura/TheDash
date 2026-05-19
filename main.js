@@ -184,6 +184,17 @@ ipcMain.handle('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender)
 ipcMain.handle('window-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); w.isMaximized() ? w.unmaximize() : w.maximize(); });
 ipcMain.handle('window-close', (e) => BrowserWindow.fromWebContents(e.sender).close());
 
+ipcMain.handle('open-project-window', (_, projectId) => {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'logo.png'));
+  const win = new BrowserWindow({
+    width: 1200, height: 780, minWidth: 900, minHeight: 600,
+    frame: false, backgroundColor: '#f5f7ff', icon,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  win.loadFile('index.html');
+  win.webContents.once('did-finish-load', () => win.webContents.send('goto-project', projectId));
+});
+
 ipcMain.handle('show-item-in-folder', (_, p) => shell.showItemInFolder(p));
 
 ipcMain.handle('open-image-dialog', async () => {
