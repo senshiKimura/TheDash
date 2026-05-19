@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('api', {
   saveAppSettings: (s) => ipcRenderer.invoke('save-app-settings', s),
   bulkSaveAll: (data) => ipcRenderer.invoke('bulk-save-all', data),
   serverRequest: (opts) => ipcRenderer.invoke('server-request', opts),
+  getWeeklyReviews: () => ipcRenderer.invoke('get-weekly-reviews'),
+  saveWeeklyReview: (r) => ipcRenderer.invoke('save-weekly-review', r),
   openProjectWindow: (id) => ipcRenderer.invoke('open-project-window', id),
   onGotoProject: (cb) => ipcRenderer.on('goto-project', (_, id) => cb(id)),
 });

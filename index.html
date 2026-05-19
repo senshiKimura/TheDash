@@ -49,6 +49,10 @@
           <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Calendrier</span>
         </button>
+        <button class="nav-btn" data-page="weekly-review">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+          <span>Revue hebdo</span>
+        </button>
       </div>
       <div class="sidebar-bottom">
         <div id="sidebar-deadlines"></div>
@@ -395,6 +399,55 @@
           <span class="cal-legend-item"><span class="cal-legend-dot" style="background:#ef4444"></span>Échéance projet</span>
           <span class="cal-legend-item"><span class="cal-legend-dot" style="background:#f59e0b"></span>Relance</span>
           <span class="cal-legend-item"><span class="cal-legend-dot" style="background:#8b5cf6"></span>Tâche</span>
+        </div>
+      </section>
+
+      <!-- ═══ REVUE HEBDOMADAIRE ═══ -->
+      <section id="page-weekly-review" class="page">
+        <div class="page-header">
+          <div><h1>Revue hebdomadaire</h1><p class="subtitle">Bilan et planification de la semaine</p></div>
+          <button class="btn-primary" id="btn-save-weekly">Sauvegarder</button>
+        </div>
+        <div class="weekly-layout">
+          <div class="weekly-sidebar-pane">
+            <div class="weekly-sidebar-title">Semaines passées</div>
+            <div id="weekly-past-list"></div>
+          </div>
+          <div class="weekly-main-pane">
+            <div class="weekly-form-header">
+              <span class="weekly-week-label" id="weekly-week-label"></span>
+              <div class="weekly-rating" id="weekly-rating"></div>
+            </div>
+            <div class="weekly-auto-summary" id="weekly-auto-summary"></div>
+            <div class="weekly-section">
+              <div class="weekly-section-label">✅ Ce qui a bien marché</div>
+              <div class="rich-editor-wrap">
+                <div class="rich-toolbar" id="weekly-went-well-toolbar"><button data-cmd="bold" title="Gras"><b>B</b></button><button data-cmd="italic" title="Italique"><i>I</i></button><button data-cmd="underline" title="Souligner"><u>U</u></button><span class="rich-sep"></span><button data-cmd="insertUnorderedList" title="Liste">• Liste</button></div>
+                <div class="rich-content" id="weekly-went-well" contenteditable="true" data-placeholder="Quels progrès avez-vous réalisés ?"></div>
+              </div>
+            </div>
+            <div class="weekly-section">
+              <div class="weekly-section-label">🚧 Ce qui était bloqué</div>
+              <div class="rich-editor-wrap">
+                <div class="rich-toolbar" id="weekly-blocked-toolbar"><button data-cmd="bold" title="Gras"><b>B</b></button><button data-cmd="italic" title="Italique"><i>I</i></button><button data-cmd="underline" title="Souligner"><u>U</u></button><span class="rich-sep"></span><button data-cmd="insertUnorderedList" title="Liste">• Liste</button></div>
+                <div class="rich-content" id="weekly-blocked" contenteditable="true" data-placeholder="Qu’est-ce qui a posé problème ?"></div>
+              </div>
+            </div>
+            <div class="weekly-section">
+              <div class="weekly-section-label">🎯 Focus semaine prochaine</div>
+              <div class="rich-editor-wrap">
+                <div class="rich-toolbar" id="weekly-next-focus-toolbar"><button data-cmd="bold" title="Gras"><b>B</b></button><button data-cmd="italic" title="Italique"><i>I</i></button><button data-cmd="underline" title="Souligner"><u>U</u></button><span class="rich-sep"></span><button data-cmd="insertUnorderedList" title="Liste">• Liste</button></div>
+                <div class="rich-content" id="weekly-next-focus" contenteditable="true" data-placeholder="Sur quoi vous concentrez-vous la semaine prochaine ?"></div>
+              </div>
+            </div>
+            <div class="weekly-section">
+              <div class="weekly-section-label">📝 Notes libres</div>
+              <div class="rich-editor-wrap">
+                <div class="rich-toolbar" id="weekly-notes-toolbar"><button data-cmd="bold" title="Gras"><b>B</b></button><button data-cmd="italic" title="Italique"><i>I</i></button><button data-cmd="underline" title="Souligner"><u>U</u></button><span class="rich-sep"></span><button data-cmd="insertUnorderedList" title="Liste">• Liste</button></div>
+                <div class="rich-content" id="weekly-notes" contenteditable="true" data-placeholder="Autres observations, idées, réflexions..."></div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -936,6 +989,25 @@
       <button id="pom-reset" class="pom-ctrl-btn" title="Réinitialiser">↺</button>
       <button id="pom-start" class="pom-ctrl-btn pom-main-btn">▶ Démarrer</button>
       <button id="pom-skip" class="pom-ctrl-btn" title="Sauter">⏭</button>
+    </div>
+  </div>
+
+  <!-- ══ MODE FOCUS ══ -->
+  <div id="focus-overlay" class="focus-overlay hidden">
+    <button id="focus-esc" class="focus-esc-btn">✕ Quitter le focus <span style="opacity:.45;font-size:10px">(Echap)</span></button>
+    <div class="focus-card">
+      <div class="focus-proj-name" id="focus-proj-name"></div>
+      <h1 class="focus-task-title" id="focus-task-title"></h1>
+      <p class="focus-task-desc" id="focus-task-desc"></p>
+      <div class="focus-timer-wrap">
+        <div class="focus-timer-display" id="focus-timer-display">25:00</div>
+        <div class="focus-timer-btns">
+          <button class="focus-btn-main" id="focus-pom-toggle">▶ Démarrer</button>
+          <button class="focus-btn-sec" id="focus-pom-reset" title="Réinitialiser">↺</button>
+        </div>
+      </div>
+      <button class="focus-done-btn" id="focus-done-btn">✓ Marquer comme fait</button>
+      <div class="focus-progress-info" id="focus-progress-info"></div>
     </div>
   </div>
 

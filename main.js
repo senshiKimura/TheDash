@@ -198,6 +198,15 @@ ipcMain.handle('open-project-window', (_, projectId) => {
 
 ipcMain.handle('show-item-in-folder', (_, p) => shell.showItemInFolder(p));
 
+ipcMain.handle('get-weekly-reviews', () => load('weekly-reviews', []));
+ipcMain.handle('save-weekly-review', (_, review) => {
+  const reviews = load('weekly-reviews', []);
+  const idx = reviews.findIndex(r => r.id === review.id);
+  if (idx >= 0) reviews[idx] = review; else reviews.push(review);
+  save('weekly-reviews', reviews);
+  return reviews;
+});
+
 ipcMain.handle('open-image-dialog', async () => {
   const r = await dialog.showOpenDialog({
     properties: ['openFile'],

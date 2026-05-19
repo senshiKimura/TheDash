@@ -30,6 +30,12 @@ let openTabs = [{ id: 'main', type: 'main', label: 'Accueil' }];
 let activeTabId = 'main';
 let _lastMainPage = 'home-v2';
 
+// ── Focus mode ───────────────────────────────────────────────────────────
+let focusData = { projectId: null, taskIdx: null, secs: 25 * 60, running: false, timerId: null };
+
+// ── Weekly review ────────────────────────────────────────────────────────
+let weeklyReviews = [], currentWeeklyReview = null, weeklyRating = 3;
+
 // Pomodoro state
 let pomState = { phase: 'work', running: false, sessionCount: 0, intervalId: null };
 const POM_DURATIONS = { work: 25 * 60, break: 5 * 60, longBreak: 15 * 60 };
@@ -163,6 +169,15 @@ async function init() {
     if (ctxMenuTarget?.type === 'project') openProjectInTab(ctxMenuTarget.data.id);
     hideCtxMenu();
   });
+
+  // Mode Focus
+  on('focus-esc', 'click', closeFocusMode);
+  on('focus-pom-toggle', 'click', focusPomToggle);
+  on('focus-pom-reset', 'click', focusPomReset);
+  on('focus-done-btn', 'click', focusDone);
+
+  // Revue hebdo
+  on('btn-save-weekly', 'click', doSaveWeeklyReview);
 
   // Home stat cards → filter
   qAll('.stat-card').forEach(card => {
@@ -346,7 +361,7 @@ async function init() {
 
   // Context menu
   document.addEventListener('click', (e) => { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCtxMenu(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCtxMenu(); closeFocusMode(); } });
   on('ctx-open-folder', 'click', () => {
     if (ctxMenuTarget?.type === 'resource' && ctxMenuTarget.data.value) window.api.showItemInFolder(ctxMenuTarget.data.value);
     hideCtxMenu();
@@ -532,6 +547,7 @@ function showPage(name) {
   if (pageEl) pageEl.classList.add('active');
   if (name === 'home-v2') renderHomeV2();
   if (name === 'calendar') renderCalendar();
+  if (name === 'weekly-review') renderWeeklyReview();
 }
 
 function navTo(page) {
@@ -565,13 +581,11 @@ function getCalendarEvents(year, month) {
         }
       }
     }
-    for (const col of (p.taskColumns || [])) {
-      for (const task of (col.tasks || [])) {
-        if (task.deadline && task.status !== 'done') {
-          const d = new Date(task.deadline + 'T00:00:00');
-          if (d.getFullYear() === year && d.getMonth() === month) {
-            events.push({ date: task.deadline, type: 'task', label: task.title, color: '#8b5cf6', projectId: p.id });
-          }
+    for (const task of (p.tasks || [])) {
+      if (task.deadline && task.status !== 'done') {
+        const d = new Date(task.deadline + 'T00:00:00');
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          events.push({ date: task.deadline, type: 'task', label: task.title, color: '#8b5cf6', projectId: p.id });
         }
       }
     }
@@ -1012,6 +1026,9 @@ function renderTasks(p) {
   board.querySelectorAll('.task-del').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation(); removeTask(parseInt(el.dataset.idx));
   }));
+  board.querySelectorAll('.task-focus-btn').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation(); openFocusMode(currentProjectId, parseInt(el.dataset.idx));
+  }));
 
   // Drag & drop
   board.querySelectorAll('.kanban-task-card').forEach(card => {
@@ -1048,6 +1065,7 @@ function kanbanTaskCard(t, idx, col) {
       <span class="task-badge ${t.priority || 'low'}">${priorityLabel(t.priority)}</span>
       ${dlChip}
       <div style="margin-left:auto;display:flex;gap:2px">
+        <button class="task-focus-btn" data-idx="${idx}" title="Mode focus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button class="task-edit-btn" data-idx="${idx}" title="Modifier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="task-del" data-idx="${idx}" title="Supprimer">✕</button>
       </div>
@@ -1064,6 +1082,201 @@ async function moveTaskToCol(taskIdx, colId) {
   else if (colId === 'col-done') p.tasks[taskIdx].status = 'done';
   projects = await window.api.saveProject(p);
   renderTasks(p); renderHome(); renderProjects();
+}
+
+// ══ MODE FOCUS ════════════════════════════════════════════════════════
+function openFocusMode(projectId, taskIdx) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const task = (p.tasks || [])[taskIdx];
+  if (!task) return;
+  if (focusData.timerId) clearInterval(focusData.timerId);
+  focusData = { projectId, taskIdx, secs: 25 * 60, running: false, timerId: null };
+  q('focus-proj-name').textContent = p.title;
+  q('focus-task-title').textContent = task.title;
+  q('focus-task-desc').textContent = task.description ? stripHtml(task.description) : '';
+  const tasks = p.tasks || [];
+  const done = tasks.filter(t => t.status === 'done').length;
+  q('focus-progress-info').textContent = `${done} / ${tasks.length} tâches terminées dans ce projet`;
+  q('focus-pom-toggle').textContent = '▶ Démarrer';
+  _focusUpdateTimer();
+  q('focus-overlay').classList.remove('hidden');
+}
+
+function closeFocusMode() {
+  if (focusData.timerId) clearInterval(focusData.timerId);
+  focusData = { projectId: null, taskIdx: null, secs: 25 * 60, running: false, timerId: null };
+  q('focus-overlay').classList.add('hidden');
+}
+
+function _focusUpdateTimer() {
+  const m = String(Math.floor(focusData.secs / 60)).padStart(2, '0');
+  const s = String(focusData.secs % 60).padStart(2, '0');
+  const el = q('focus-timer-display');
+  if (el) el.textContent = `${m}:${s}`;
+}
+
+function focusPomToggle() {
+  const btn = q('focus-pom-toggle');
+  if (focusData.running) {
+    clearInterval(focusData.timerId);
+    focusData.running = false;
+    if (btn) btn.textContent = '▶ Reprendre';
+  } else {
+    if (focusData.secs <= 0) focusData.secs = 25 * 60;
+    focusData.running = true;
+    if (btn) btn.textContent = '⏸ Pause';
+    focusData.timerId = setInterval(() => {
+      focusData.secs--;
+      _focusUpdateTimer();
+      if (focusData.secs <= 0) {
+        clearInterval(focusData.timerId);
+        focusData.running = false;
+        if (btn) btn.textContent = '▶ Recommencer';
+        new Notification('TheDash — Focus', { body: `⏰ Session terminée : ${q('focus-task-title')?.textContent}` });
+      }
+    }, 1000);
+  }
+}
+
+function focusPomReset() {
+  if (focusData.timerId) clearInterval(focusData.timerId);
+  focusData.running = false;
+  focusData.secs = 25 * 60;
+  const btn = q('focus-pom-toggle');
+  if (btn) btn.textContent = '▶ Démarrer';
+  _focusUpdateTimer();
+}
+
+async function focusDone() {
+  const { projectId, taskIdx } = focusData;
+  closeFocusMode();
+  if (projectId === null || taskIdx === null) return;
+  const p = projects.find(x => x.id === projectId);
+  if (!p || !p.tasks?.[taskIdx]) return;
+  p.tasks[taskIdx].status = 'done';
+  p.tasks[taskIdx].colId = 'col-done';
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  if (currentProjectId === projectId) renderTasks(p);
+  renderHome(); renderProjects();
+}
+
+// ══ REVUE HEBDOMADAIRE ════════════════════════════════════════════════
+function _weekId() {
+  const d = new Date();
+  const startOfYear = new Date(d.getFullYear(), 0, 1);
+  const dayOfYear = Math.ceil((d - startOfYear) / 86400000);
+  const week = Math.ceil((dayOfYear + startOfYear.getDay()) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function _weekDateRange() {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const monday = new Date(now); monday.setDate(now.getDate() - day + 1);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const fmt = (d) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  return `${fmt(monday)} – ${fmt(sunday)} ${now.getFullYear()}`;
+}
+
+async function renderWeeklyReview() {
+  weeklyReviews = await window.api.getWeeklyReviews();
+  const wid = _weekId();
+  const existing = weeklyReviews.find(r => r.id === wid);
+  if (!currentWeeklyReview || currentWeeklyReview.id !== wid) {
+    currentWeeklyReview = existing || {
+      id: wid, weekLabel: _weekDateRange(), rating: 3,
+      wentWell: '', blocked: '', nextFocus: '', notes: '',
+      createdAt: new Date().toISOString(),
+    };
+    weeklyRating = currentWeeklyReview.rating;
+    _applyWeeklyForm(currentWeeklyReview);
+  }
+  const lbl = q('weekly-week-label');
+  if (lbl) lbl.textContent = `Semaine du ${currentWeeklyReview.weekLabel}`;
+  _renderWeeklyRating();
+  _renderWeeklyAutoSummary();
+  _renderPastReviews();
+  bindRichToolbars();
+}
+
+function _applyWeeklyForm(r) {
+  setEditorHtml('weekly-went-well', r.wentWell || '');
+  setEditorHtml('weekly-blocked', r.blocked || '');
+  setEditorHtml('weekly-next-focus', r.nextFocus || '');
+  setEditorHtml('weekly-notes', r.notes || '');
+}
+
+function _renderWeeklyRating() {
+  const c = q('weekly-rating');
+  if (!c) return;
+  c.innerHTML = [1, 2, 3, 4, 5].map(n =>
+    `<button class="weekly-star${n <= weeklyRating ? ' active' : ''}" data-r="${n}">★</button>`
+  ).join('');
+  c.querySelectorAll('.weekly-star').forEach(btn => {
+    btn.addEventListener('click', () => { weeklyRating = parseInt(btn.dataset.r); _renderWeeklyRating(); });
+  });
+}
+
+function _renderWeeklyAutoSummary() {
+  const el = q('weekly-auto-summary');
+  if (!el) return;
+  const inProg = projects.filter(p => ['en-cours', 'actif', 'in-progress', 'active'].includes(p.status));
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = [];
+  for (const p of projects) {
+    for (const t of (p.tasks || [])) {
+      if (t.deadline && t.deadline < today && t.status !== 'done') overdue.push({ title: t.title, proj: p.title });
+    }
+  }
+  el.innerHTML = `
+    <div class="wsummary-row">
+      <span class="wsummary-lbl">🗂 En cours</span>
+      <span class="wsummary-val">${inProg.length ? inProg.map(p => `<span class="wsummary-chip">${escHtml(p.title)}</span>`).join('') : '<em style="color:var(--text3)">Aucun</em>'}</span>
+    </div>
+    ${overdue.length ? `<div class="wsummary-row"><span class="wsummary-lbl" style="color:var(--danger)">⚠ En retard</span><span class="wsummary-val">${overdue.map(o => `<span class="wsummary-chip danger">${escHtml(o.title)} <em>(${escHtml(o.proj)})</em></span>`).join('')}</span></div>` : ''}
+  `;
+}
+
+function _renderPastReviews() {
+  const list = q('weekly-past-list');
+  if (!list) return;
+  const past = [...weeklyReviews].sort((a, b) => b.id.localeCompare(a.id));
+  if (!past.length) { list.innerHTML = '<p style="padding:12px 16px;font-size:12px;color:var(--text3)">Aucune revue passée</p>'; return; }
+  list.innerHTML = past.map(r => `
+    <div class="weekly-past-item${r.id === currentWeeklyReview?.id ? ' active' : ''}" data-wid="${r.id}">
+      <span class="wpast-label">${r.weekLabel}</span>
+      <span class="wpast-stars">${'★'.repeat(r.rating || 0)}${'☆'.repeat(5 - (r.rating || 0))}</span>
+    </div>
+  `).join('');
+  list.querySelectorAll('.weekly-past-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = weeklyReviews.find(x => x.id === el.dataset.wid);
+      if (!r) return;
+      currentWeeklyReview = r; weeklyRating = r.rating || 3;
+      const lbl = q('weekly-week-label');
+      if (lbl) lbl.textContent = `Semaine du ${r.weekLabel}`;
+      _applyWeeklyForm(r); _renderWeeklyRating();
+      list.querySelectorAll('.weekly-past-item').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+      bindRichToolbars();
+    });
+  });
+}
+
+async function doSaveWeeklyReview() {
+  if (!currentWeeklyReview) return;
+  currentWeeklyReview.rating = weeklyRating;
+  currentWeeklyReview.wentWell = getEditorHtml('weekly-went-well');
+  currentWeeklyReview.blocked = getEditorHtml('weekly-blocked');
+  currentWeeklyReview.nextFocus = getEditorHtml('weekly-next-focus');
+  currentWeeklyReview.notes = getEditorHtml('weekly-notes');
+  currentWeeklyReview.updatedAt = new Date().toISOString();
+  weeklyReviews = await window.api.saveWeeklyReview(currentWeeklyReview);
+  _renderPastReviews();
+  const btn = q('btn-save-weekly');
+  if (btn) { btn.textContent = '✓ Sauvegardé'; setTimeout(() => { btn.textContent = 'Sauvegarder'; }, 2000); }
 }
 
 function renderDocs(p) {
