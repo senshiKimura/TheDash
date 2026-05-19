@@ -25,6 +25,11 @@ let appSettings = {};
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 
+// ── Tab system ──────────────────────────────────────────────────────────
+let openTabs = [{ id: 'main', type: 'main', label: 'Accueil' }];
+let activeTabId = 'main';
+let _lastMainPage = 'home-v2';
+
 // Pomodoro state
 let pomState = { phase: 'work', running: false, sessionCount: 0, intervalId: null };
 const POM_DURATIONS = { work: 25 * 60, break: 5 * 60, longBreak: 15 * 60 };
@@ -50,7 +55,66 @@ function getTaskCols(p) {
   return p.taskColumns?.length ? p.taskColumns : DEFAULT_TASK_COLS;
 }
 
-// ══ INIT ══════════════════════════════════════════════════════════════
+// ══ TAB SYSTEM ════════════════════════════════════════════════════════
+function renderTabBar() {
+  const bar = document.getElementById('tab-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  for (const tab of openTabs) {
+    const el = document.createElement('div');
+    el.className = 'app-tab' + (tab.id === activeTabId ? ' active' : '');
+    el.dataset.tabId = tab.id;
+    el.innerHTML = `<span class="app-tab-label">${tab.label}</span>` +
+      (tab.id !== 'main' ? `<span class="app-tab-close" data-tab-id="${tab.id}">✕</span>` : '');
+    el.addEventListener('click', (e) => {
+      if (e.target.classList.contains('app-tab-close')) {
+        closeTab(e.target.dataset.tabId);
+      } else {
+        switchTab(tab.id);
+      }
+    });
+    bar.appendChild(el);
+  }
+}
+
+function openProjectInTab(projectId) {
+  const existing = openTabs.find(t => t.type === 'project' && t.projectId === projectId);
+  if (existing) { switchTab(existing.id); return; }
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const tabId = 'proj-' + projectId;
+  openTabs.push({ id: tabId, type: 'project', projectId, label: p.title });
+  activeTabId = tabId;
+  renderTabBar();
+  openProjectDetail(p.id);
+}
+
+function switchTab(tabId) {
+  activeTabId = tabId;
+  renderTabBar();
+  const tab = openTabs.find(t => t.id === tabId);
+  if (!tab) return;
+  if (tab.type === 'main') {
+    showPage(_lastMainPage);
+  } else if (tab.type === 'project') {
+    openProjectDetail(tab.projectId);
+  }
+}
+
+function closeTab(tabId) {
+  const idx = openTabs.findIndex(t => t.id === tabId);
+  if (idx === -1) return;
+  openTabs.splice(idx, 1);
+  if (activeTabId === tabId) {
+    activeTabId = openTabs[Math.max(0, idx - 1)]?.id || 'main';
+    const next = openTabs.find(t => t.id === activeTabId);
+    if (next?.type === 'main') showPage(_lastMainPage);
+    else if (next?.type === 'project') openProjectDetail(next.projectId);
+  }
+  renderTabBar();
+}
+
+// ══ INIT ════════════════════════════════════════════════════════════
 async function init() {
   [projects, resources, notes, groups, resCats] = await Promise.all([
     window.api.getProjects(), window.api.getResources(), window.api.getNotes(), window.api.getGroups(), window.api.getResCats()
@@ -94,14 +158,11 @@ async function init() {
   on('cal-prev', 'click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
   on('cal-next', 'click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
 
-  // Multi-fenêtre
+  // Onglet projet
   on('ctx-window-proj', 'click', () => {
-    if (ctxMenuTarget?.type === 'project') window.api.openProjectWindow(ctxMenuTarget.data.id);
+    if (ctxMenuTarget?.type === 'project') openProjectInTab(ctxMenuTarget.data.id);
     hideCtxMenu();
   });
-  if (window.api.onGotoProject) {
-    window.api.onGotoProject((id) => openProjectDetail(id));
-  }
 
   // Home stat cards → filter
   qAll('.stat-card').forEach(card => {
@@ -426,6 +487,8 @@ async function init() {
 
   // Refresh when reminders are checked
   window.api.onRemindersChecked(() => { projects = window.api.getProjects().then(p => { projects = p; renderHome(); }); });
+
+  renderTabBar();
 }
 
 // ══ CLOCK & GREETING ══
@@ -472,10 +535,13 @@ function showPage(name) {
 }
 
 function navTo(page) {
+  _lastMainPage = page;
+  activeTabId = 'main';
   qAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`[data-page="${page}"]`);
   if (btn) btn.classList.add('active');
   showPage(page);
+  renderTabBar();
 }
 
 // ══ HOME (V1 supprimé — stub pour compatibilité appels internes) ═══════════
@@ -496,6 +562,16 @@ function getCalendarEvents(year, month) {
         const d = new Date(r.date + 'T00:00:00');
         if (d.getFullYear() === year && d.getMonth() === month) {
           events.push({ date: r.date, type: 'reminder', label: r.message || p.title, color: '#f59e0b', projectId: p.id });
+        }
+      }
+    }
+    for (const col of (p.taskColumns || [])) {
+      for (const task of (col.tasks || [])) {
+        if (task.deadline && task.status !== 'done') {
+          const d = new Date(task.deadline + 'T00:00:00');
+          if (d.getFullYear() === year && d.getMonth() === month) {
+            events.push({ date: task.deadline, type: 'task', label: task.title, color: '#8b5cf6', projectId: p.id });
+          }
         }
       }
     }

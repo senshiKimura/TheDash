@@ -48,6 +48,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .tb-btn:hover{background:var(--bg4);color:var(--text2)}
 .tb-btn.close:hover{background:var(--danger);color:#fff}
 
+/* ── Tab bar ── */
+.tab-bar{height:36px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 8px;gap:2px;flex-shrink:0;-webkit-app-region:no-drag;overflow-x:auto;overflow-y:hidden}
+.tab-bar::-webkit-scrollbar{height:3px}
+.tab-bar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.app-tab{display:flex;align-items:center;gap:6px;padding:0 12px;height:30px;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);background:transparent;transition:all .15s;max-width:200px;flex-shrink:0;white-space:nowrap;overflow:hidden;user-select:none}
+.app-tab:hover{background:var(--bg3);color:var(--text)}
+.app-tab.active{background:var(--card);color:var(--text);border-color:var(--border);font-weight:600}
+.app-tab-label{overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.app-tab-close{margin-left:4px;opacity:.45;width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:all .12s}
+.app-tab-close:hover{opacity:1;background:var(--bg4)}
+
 /* ── Layout ── */
 .layout{display:flex;flex:1;overflow:hidden}
 
