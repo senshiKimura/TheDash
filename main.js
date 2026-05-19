@@ -72,6 +72,7 @@ function createWindow() {
   });
   mainWin.loadFile('index.html');
   mainWin.setIcon(icon);
+  mainWin.on('close', (e) => { if (!app.isQuitting) { e.preventDefault(); mainWin.hide(); } });
 }
 
 app.whenReady().then(() => {
@@ -182,7 +183,7 @@ ipcMain.handle('open-url-external', (_, url) => shell.openExternal(url));
 
 ipcMain.handle('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender).minimize());
 ipcMain.handle('window-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); w.isMaximized() ? w.unmaximize() : w.maximize(); });
-ipcMain.handle('window-close', (e) => BrowserWindow.fromWebContents(e.sender).close());
+ipcMain.handle('window-close', (e) => { const win = BrowserWindow.fromWebContents(e.sender); if (win === mainWin) win.hide(); else win.close(); });
 
 ipcMain.handle('open-project-window', (_, projectId) => {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'logo.png'));
