@@ -64,9 +64,12 @@ function createTray() {
 
 function createWindow() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'logo.png'));
+  const savedSettings = load('app-settings', {});
+  const themeBgMap = { light: '#f5f7ff', dark: '#080e1c', hacker: '#020c14' };
+  const initBg = themeBgMap[savedSettings.themeMode] || (savedSettings.darkMode ? '#080e1c' : '#f5f7ff');
   mainWin = new BrowserWindow({
     width: 1400, height: 860, minWidth: 1000, minHeight: 640,
-    frame: false, backgroundColor: '#f5f7ff',
+    frame: false, backgroundColor: initBg,
     icon,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
@@ -181,6 +184,7 @@ ipcMain.handle('open-file-dialog', async () => {
 ipcMain.handle('open-path', (_, p) => shell.openPath(p));
 ipcMain.handle('open-url-external', (_, url) => shell.openExternal(url));
 
+ipcMain.handle('set-window-background', (_, color) => { if (mainWin) mainWin.setBackgroundColor(color); });
 ipcMain.handle('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender).minimize());
 ipcMain.handle('window-maximize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); w.isMaximized() ? w.unmaximize() : w.maximize(); });
 ipcMain.handle('window-close', (e) => { const win = BrowserWindow.fromWebContents(e.sender); if (win === mainWin) win.hide(); else win.close(); });

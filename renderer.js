@@ -31,14 +31,15 @@ let activeTabId = 'main';
 let _lastMainPage = 'home-v2';
 
 // ── Focus mode ───────────────────────────────────────────────────────────
-let focusData = { projectId: null, taskIdx: null, secs: 25 * 60, running: false, timerId: null };
+let focusDuration = 25; // minutes, customizable
+let focusData = { projectId: null, taskIdx: null, secs: focusDuration * 60, running: false, timerId: null };
 
 // ── Weekly review ────────────────────────────────────────────────────────
 let weeklyReviews = [], currentWeeklyReview = null, weeklyRating = 3;
 
 // Pomodoro state
 let pomState = { phase: 'work', running: false, sessionCount: 0, intervalId: null };
-const POM_DURATIONS = { work: 25 * 60, break: 5 * 60, longBreak: 15 * 60 };
+let POM_DURATIONS = { work: 25 * 60, break: 5 * 60, longBreak: 15 * 60 };
 let pomSecondsLeft = POM_DURATIONS.work;
 
 const DEFAULT_TASK_COLS = [
@@ -127,8 +128,19 @@ async function init() {
   ]);
   appSettings = await window.api.getAppSettings();
 
-  // Apply saved dark mode
-  if (appSettings.darkMode) applyDarkMode(true);
+  // Apply saved theme (with backward compat for old darkMode bool)
+  applyTheme(appSettings.themeMode || (appSettings.darkMode ? 'dark' : 'light'), appSettings.customTheme);
+
+  // Apply saved timer durations
+  if (appSettings.pomWork)      POM_DURATIONS.work      = appSettings.pomWork * 60;
+  if (appSettings.pomBreak)     POM_DURATIONS.break     = appSettings.pomBreak * 60;
+  if (appSettings.pomLongBreak) POM_DURATIONS.longBreak = appSettings.pomLongBreak * 60;
+  pomSecondsLeft = POM_DURATIONS.work;
+  if (appSettings.focusDuration) focusDuration = appSettings.focusDuration;
+  if (q('focus-dur-val')) q('focus-dur-val').textContent = focusDuration;
+  if (q('pom-set-work'))      q('pom-set-work').value      = appSettings.pomWork      || 25;
+  if (q('pom-set-break'))     q('pom-set-break').value     = appSettings.pomBreak     || 5;
+  if (q('pom-set-longbreak')) q('pom-set-longbreak').value = appSettings.pomLongBreak || 15;
 
   startClock();
   updateGreeting();
@@ -175,6 +187,24 @@ async function init() {
   on('focus-pom-toggle', 'click', focusPomToggle);
   on('focus-pom-reset', 'click', focusPomReset);
   on('focus-done-btn', 'click', focusDone);
+  on('focus-dur-minus', 'click', () => {
+    if (focusData.running) return;
+    focusDuration = Math.max(1, focusDuration - 5);
+    focusData.secs = focusDuration * 60;
+    if (q('focus-dur-val')) q('focus-dur-val').textContent = focusDuration;
+    _focusUpdateTimer();
+    appSettings.focusDuration = focusDuration;
+    window.api.saveAppSettings(appSettings);
+  });
+  on('focus-dur-plus', 'click', () => {
+    if (focusData.running) return;
+    focusDuration = Math.min(120, focusDuration + 5);
+    focusData.secs = focusDuration * 60;
+    if (q('focus-dur-val')) q('focus-dur-val').textContent = focusDuration;
+    _focusUpdateTimer();
+    appSettings.focusDuration = focusDuration;
+    window.api.saveAppSettings(appSettings);
+  });
 
   // Revue hebdo
   on('btn-save-weekly', 'click', doSaveWeeklyReview);
@@ -238,6 +268,10 @@ async function init() {
   qAll('.pom-phase-btn').forEach(btn => btn.addEventListener('click', () => {
     pomSetPhase(btn.dataset.phase);
   }));
+  on('pom-settings-btn', 'click', () => {
+    q('pom-settings-panel')?.classList.toggle('hidden');
+  });
+  on('pom-set-save', 'click', savePomSettings);
 
   // Detail
   on('btn-back', 'click', () => navTo('projects'));
@@ -312,9 +346,11 @@ async function init() {
 
   // Dark mode toggle
   on('btn-toggle-dark', 'click', () => {
-    const isDark = document.body.classList.toggle('dark');
-    applyDarkMode(isDark);
-    appSettings.darkMode = isDark;
+    const curMode = appSettings.themeMode || (appSettings.darkMode ? 'dark' : 'light');
+    const newMode = curMode === 'dark' ? 'light' : 'dark';
+    appSettings.themeMode = newMode;
+    appSettings.darkMode = (newMode === 'dark');
+    applyTheme(newMode);
     window.api.saveAppSettings(appSettings);
   });
 
@@ -330,6 +366,45 @@ async function init() {
   // Settings tabs
   document.querySelectorAll('.settings-tab').forEach(btn => {
     btn.addEventListener('click', () => switchSettingsTab(btn.dataset.stab));
+  });
+  // Theme preset buttons
+  qAll('.theme-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.theme;
+      if (mode === 'custom') {
+        const sec = q('custom-theme-section');
+        if (sec) sec.style.display = '';
+        qAll('.theme-preset-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === 'custom'));
+        return;
+      }
+      appSettings.themeMode = mode;
+      appSettings.darkMode = (mode === 'dark');
+      applyTheme(mode, appSettings.customTheme);
+      window.api.saveAppSettings(appSettings);
+      renderThemePresets();
+    });
+  });
+  on('btn-apply-custom-theme', 'click', () => {
+    const bg = q('theme-color-bg')?.value || '#f5f7ff';
+    const text = q('theme-color-text')?.value || '#0f172a';
+    const accent = q('theme-color-accent')?.value || '#2563eb';
+    appSettings.customTheme = { bg, text, accent };
+    appSettings.themeMode = 'custom';
+    appSettings.darkMode = false;
+    applyTheme('custom', { bg, text, accent });
+    window.api.saveAppSettings(appSettings);
+    renderThemePresets();
+  });
+  // Live hex label update for color pickers
+  ['theme-color-bg','theme-color-text','theme-color-accent'].forEach(id => {
+    const el = q(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const val = q(id + '-val');
+      if (val) val.textContent = el.value;
+      const preview = q('theme-mini-custom-preview');
+      if (preview && id === 'theme-color-bg') preview.style.background = el.value;
+    });
   });
   // Server
   on('btn-server-check', 'click', checkServerConnection);
@@ -507,20 +582,84 @@ async function init() {
 }
 
 // ══ CLOCK & GREETING ══
-function applyDarkMode(isDark) {
-  document.body.classList.toggle('dark', isDark);
+const THEME_BG = { light: '#f5f7ff', dark: '#080e1c', hacker: '#020c14' };
+const _CUSTOM_VARS = ['--bg','--bg2','--bg3','--bg4','--card','--border','--border2','--accent','--accent2','--accent-bg','--accent-glow','--text','--text2','--text3'];
+
+function _clearCustomVars() { _CUSTOM_VARS.forEach(v => document.body.style.removeProperty(v)); }
+
+function _hexToRgb(hex) {
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function _hexAlpha(hex, a) { const [r,g,b] = _hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; }
+function _hexToHsl(hex) {
+  let [r,g,b] = _hexToRgb(hex).map(x => x/255);
+  const max = Math.max(r,g,b), min = Math.min(r,g,b); let h, s, l = (max+min)/2;
+  if (max === min) { h = s = 0; } else {
+    const d = max-min; s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max) { case r: h=(g-b)/d+(g<b?6:0); break; case g: h=(b-r)/d+2; break; case b: h=(r-g)/d+4; break; }
+    h /= 6;
+  }
+  return [h*360, s*100, l*100];
+}
+function _hslToHex(h, s, l) {
+  h/=360; s/=100; l/=100;
+  const hue2rgb = (p,q,t) => { if(t<0)t++; if(t>1)t--; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
+  let r,g,b;
+  if (s === 0) { r=g=b=l; } else { const q2=l<0.5?l*(1+s):l+s-l*s,p=2*l-q2; r=hue2rgb(p,q2,h+1/3); g=hue2rgb(p,q2,h); b=hue2rgb(p,q2,h-1/3); }
+  return '#'+[r,g,b].map(x=>Math.round(Math.max(0,Math.min(255,x*255))).toString(16).padStart(2,'0')).join('');
+}
+function _applyCustomThemeVars({ bg='#f5f7ff', text='#0f172a', accent='#2563eb' }={}) {
+  const [bH,bS,bL]=_hexToHsl(bg); const dark=bL<50;
+  const bg2=_hslToHex(bH,bS,dark?Math.min(bL+4,100):Math.min(bL+6,100));
+  const bg3=_hslToHex(bH,bS,dark?Math.min(bL+8,100):Math.max(bL-4,0));
+  const bg4=_hslToHex(bH,bS,dark?Math.min(bL+13,100):Math.max(bL-8,0));
+  const [tH,tS,tL]=_hexToHsl(text);
+  const text2=_hslToHex(tH,tS,dark?Math.max(tL-25,0):Math.min(tL+30,100));
+  const text3=_hslToHex(tH,tS,dark?Math.max(tL-45,0):Math.min(tL+50,100));
+  const [aH,aS,aL]=_hexToHsl(accent); const accent2=_hslToHex(aH,aS,Math.min(aL+12,100));
+  const vars={'--bg':bg,'--bg2':bg2,'--bg3':bg3,'--bg4':bg4,'--card':bg2,'--border':_hexAlpha(accent,.18),'--border2':_hexAlpha(accent,.30),'--accent':accent,'--accent2':accent2,'--accent-bg':_hexAlpha(accent,.10),'--accent-glow':_hexAlpha(accent,.22),'--text':text,'--text2':text2,'--text3':text3};
+  Object.entries(vars).forEach(([k,v]) => document.body.style.setProperty(k,v));
+}
+
+function applyTheme(mode, customColors) {
+  document.body.classList.remove('dark','hacker');
+  _clearCustomVars();
+  if (mode === 'dark')   document.body.classList.add('dark');
+  else if (mode === 'hacker') document.body.classList.add('hacker');
+  else if (mode === 'custom' && customColors) _applyCustomThemeVars(customColors);
+  // Update sidebar icon/label
+  const isDark = mode === 'dark' || mode === 'hacker';
   const icon = document.getElementById('dark-mode-icon');
   const label = document.getElementById('dark-mode-label');
   if (isDark) {
-    // Sun icon when dark mode is on
     if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
     if (label) label.textContent = 'Mode clair';
   } else {
-    // Moon icon when light mode is on
     if (icon) icon.innerHTML = '<path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>';
     if (label) label.textContent = 'Mode sombre';
   }
+  // Update window background for faster next startup
+  const bgColor = mode === 'custom' ? (customColors?.bg || '#f5f7ff') : (THEME_BG[mode] || '#f5f7ff');
+  if (window.api.setWindowBackground) window.api.setWindowBackground(bgColor);
 }
+
+function applyDarkMode(isDark) { applyTheme(isDark ? 'dark' : 'light'); }
+
+function renderThemePresets() {
+  const mode = appSettings.themeMode || (appSettings.darkMode ? 'dark' : 'light');
+  qAll('.theme-preset-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.theme === mode));
+  const sec = q('custom-theme-section');
+  if (sec) sec.style.display = mode === 'custom' ? '' : 'none';
+  const ct = appSettings.customTheme || {};
+  const bgEl = q('theme-color-bg'), textEl = q('theme-color-text'), accentEl = q('theme-color-accent');
+  if (bgEl) { bgEl.value = ct.bg || '#f5f7ff'; const v=q('theme-color-bg-val'); if(v) v.textContent = bgEl.value; }
+  if (textEl) { textEl.value = ct.text || '#0f172a'; const v=q('theme-color-text-val'); if(v) v.textContent = textEl.value; }
+  if (accentEl) { accentEl.value = ct.accent || '#2563eb'; const v=q('theme-color-accent-val'); if(v) v.textContent = accentEl.value; }
+  const preview = q('theme-mini-custom-preview');
+  if (preview) preview.style.background = ct.bg || 'var(--bg3)';
+}
+
 
 function startClock() {
   function tick() {
@@ -1091,7 +1230,7 @@ function openFocusMode(projectId, taskIdx) {
   const task = (p.tasks || [])[taskIdx];
   if (!task) return;
   if (focusData.timerId) clearInterval(focusData.timerId);
-  focusData = { projectId, taskIdx, secs: 25 * 60, running: false, timerId: null };
+  focusData = { projectId, taskIdx, secs: focusDuration * 60, running: false, timerId: null };
   q('focus-proj-name').textContent = p.title;
   q('focus-task-title').textContent = task.title;
   q('focus-task-desc').textContent = task.description ? stripHtml(task.description) : '';
@@ -1105,8 +1244,10 @@ function openFocusMode(projectId, taskIdx) {
 
 function closeFocusMode() {
   if (focusData.timerId) clearInterval(focusData.timerId);
-  focusData = { projectId: null, taskIdx: null, secs: 25 * 60, running: false, timerId: null };
+  focusData = { projectId: null, taskIdx: null, secs: focusDuration * 60, running: false, timerId: null };
   q('focus-overlay').classList.add('hidden');
+  // Unlock duration picker
+  q('focus-dur-row')?.classList.remove('locked');
 }
 
 function _focusUpdateTimer() {
@@ -1123,8 +1264,9 @@ function focusPomToggle() {
     focusData.running = false;
     if (btn) btn.textContent = '▶ Reprendre';
   } else {
-    if (focusData.secs <= 0) focusData.secs = 25 * 60;
+    if (focusData.secs <= 0) focusData.secs = focusDuration * 60;
     focusData.running = true;
+    q('focus-dur-row')?.classList.add('locked');
     if (btn) btn.textContent = '⏸ Pause';
     focusData.timerId = setInterval(() => {
       focusData.secs--;
@@ -1142,9 +1284,10 @@ function focusPomToggle() {
 function focusPomReset() {
   if (focusData.timerId) clearInterval(focusData.timerId);
   focusData.running = false;
-  focusData.secs = 25 * 60;
+  focusData.secs = focusDuration * 60;
   const btn = q('focus-pom-toggle');
   if (btn) btn.textContent = '▶ Démarrer';
+  q('focus-dur-row')?.classList.remove('locked');
   _focusUpdateTimer();
 }
 
@@ -1323,20 +1466,34 @@ function renderComments(p) {
     const d = new Date(c.date);
     const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const preview = stripHtml(c.text || '').replace(/\s+/g, ' ').trim().slice(0, 90) || '—';
     return `<div class="journal-entry">
       <div class="journal-entry-line"></div>
       <div class="journal-entry-dot" style="background:${tag.color}"></div>
-      <div class="journal-entry-card">
+      <div class="journal-entry-card" data-idx="${realIdx}">
         <div class="journal-entry-header">
           <span class="journal-entry-tag" style="background:${tag.color}22;color:${tag.color}">${tag.icon} ${tag.label}</span>
           <span class="journal-entry-time">${dateStr} · ${timeStr}</span>
+          <span class="journal-entry-chevron">▸</span>
           <button class="comment-del" data-idx="${realIdx}" title="Supprimer">✕</button>
         </div>
+        <div class="journal-entry-preview">${escHtml(preview)}</div>
         <div class="journal-entry-text">${c.text}</div>
       </div>
     </div>`;
   }).join('');
-  list.querySelectorAll('.comment-del').forEach(el => el.addEventListener('click', () => removeComment(parseInt(el.dataset.idx))));
+  list.querySelectorAll('.comment-del').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    removeComment(parseInt(el.dataset.idx));
+  }));
+  list.querySelectorAll('.journal-entry-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.comment-del')) return;
+      const expanded = card.classList.toggle('expanded');
+      card.querySelector('.journal-entry-preview').style.display = expanded ? 'none' : '';
+      card.querySelector('.journal-entry-text').style.display = expanded ? '' : 'none';
+    });
+  });
   bindRichToolbars();
 }
 
@@ -1353,11 +1510,13 @@ function renderJournalSchema(p, comments, list) {
         const d = new Date(c.date);
         const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
         const typeClass = c.tag ? `type-${c.tag}` : '';
+        const preview = stripHtml(c.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
         return `<div class="schema-node ${pos}">
-          <div class="schema-card ${typeClass}" data-idx="${comments.indexOf(c)}" title="${escHtml(c.text)}">
+          <div class="schema-card ${typeClass}" data-idx="${comments.indexOf(c)}">
             <div class="schema-card-tag" style="background:${tag.color}22;color:${tag.color}">${tag.icon} ${tag.label}</div>
-            <div class="schema-card-text">${escHtml(c.text)}</div>
             <div class="schema-card-date">${dateStr}</div>
+            <div class="schema-card-text">${escHtml(preview)}</div>
+            <div class="schema-card-hint">Cliquer pour voir</div>
           </div>
           <div class="schema-stem"></div>
           <div class="schema-dot" style="background:${tag.color}"></div>
@@ -1366,6 +1525,15 @@ function renderJournalSchema(p, comments, list) {
     </div>
   </div>`;
   list.querySelectorAll('.schema-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const wasExpanded = card.classList.contains('expanded');
+      // Collapse all other cards first
+      list.querySelectorAll('.schema-card.expanded').forEach(c => c.classList.remove('expanded'));
+      if (!wasExpanded) {
+        card.classList.add('expanded');
+        card.querySelector('.schema-card-hint').style.display = 'none';
+      }
+    });
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const idx = parseInt(card.dataset.idx);
@@ -1993,6 +2161,26 @@ function pomSkip() {
   pomAdvancePhase();
 }
 
+async function savePomSettings() {
+  const work      = parseInt(q('pom-set-work')?.value)      || 25;
+  const brk       = parseInt(q('pom-set-break')?.value)     || 5;
+  const longBreak = parseInt(q('pom-set-longbreak')?.value) || 15;
+  POM_DURATIONS.work      = work      * 60;
+  POM_DURATIONS.break     = brk       * 60;
+  POM_DURATIONS.longBreak = longBreak * 60;
+  // Reset current phase timer
+  pomSecondsLeft = pomState.phase === 'work' ? POM_DURATIONS.work : POM_DURATIONS.break;
+  clearInterval(pomState.intervalId);
+  pomState.running = false;
+  pomUpdateUI();
+  // Persist
+  appSettings.pomWork      = work;
+  appSettings.pomBreak     = brk;
+  appSettings.pomLongBreak = longBreak;
+  await window.api.saveAppSettings(appSettings);
+  q('pom-settings-panel')?.classList.add('hidden');
+}
+
 // ══ HELPERS ══════════════════════════════════════════════════════════
 const q = (id) => document.getElementById(id);
 const qAll = (sel) => document.querySelectorAll(sel);
@@ -2479,6 +2667,7 @@ function openSettings() {
   // Reset to first tab
   switchSettingsTab('general');
   refreshGcalStatus();
+  renderThemePresets();
   openModal('modal-settings');
 }
 
@@ -2728,14 +2917,92 @@ async function pullFromServer() {
     });
     if (!res.ok || !Array.isArray(res.body?.items)) return;
 
-    let changed = false;
-    const updProjects = [...projects];
-    const updNotes    = [...notes];
-    const updResources = [...resources];
-    const updGroups   = [...groups];
-    const updResCats  = [...resCats];
+    const { items, pendingDeletes = [], forcePull = false } = res.body;
 
-    for (const item of res.body.items) {
+    // ── Process pending remote deletions ──────────────────────────
+    if (pendingDeletes.length) {
+      let delChanged = false;
+      const ackIds = [];
+      for (const del of pendingDeletes) {
+        const key = del.item_key;
+        ackIds.push(del.id);
+        _deletedIds.add(key);
+        switch (del.type) {
+          case 'project':  { const i = projects.findIndex(p => p.id === key);   if (i >= 0) { projects.splice(i, 1);   delChanged = true; } break; }
+          case 'note':     { const i = notes.findIndex(n => n.id === key);       if (i >= 0) { notes.splice(i, 1);      delChanged = true; } break; }
+          case 'resource': { const i = resources.findIndex(r => r.id === key);   if (i >= 0) { resources.splice(i, 1); delChanged = true; } break; }
+          case 'group':    { const i = groups.findIndex(g => g.id === key);      if (i >= 0) { groups.splice(i, 1);    delChanged = true; } break; }
+          case 'rescat':   { const i = resCats.findIndex(c => c.id === key);     if (i >= 0) { resCats.splice(i, 1);  delChanged = true; } break; }
+        }
+      }
+      // Save deletedIds to settings
+      appSettings.deletedItemIds = [..._deletedIds];
+      await window.api.saveAppSettings(appSettings);
+      if (delChanged) {
+        await window.api.bulkSaveAll({ projects, notes, resources, groups, resCats });
+        renderHome(); renderProjects(); renderNotes();
+        renderResCats(); renderResources(q('res-search')?.value || '');
+      }
+      // Acknowledge processed deletes
+      window.api.serverRequest({
+        url: `${base}/api/client/deletes/ack`,
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey },
+        body: { ids: ackIds },
+      });
+    }
+
+    // ── Force pull (snapshot restore) ─────────────────────────────
+    if (forcePull) {
+      const updProjects  = [];
+      const updNotes     = [];
+      const updResources = [];
+      const updGroups    = [];
+      const updResCats   = [];
+      _deletedIds.clear();
+      appSettings.deletedItemIds = [];
+      for (const item of items) {
+        let data;
+        try { data = JSON.parse(item.data); } catch { continue; }
+        switch (item.type) {
+          case 'project':  updProjects.push(data);  break;
+          case 'note':     updNotes.push(data);     break;
+          case 'resource': updResources.push(data); break;
+          case 'group':    updGroups.push(data);    break;
+          case 'rescat':   updResCats.push(data);   break;
+        }
+      }
+      await window.api.bulkSaveAll({
+        projects: updProjects, notes: updNotes, resources: updResources,
+        groups: updGroups, resCats: updResCats,
+      });
+      await window.api.saveAppSettings(appSettings);
+      projects  = updProjects;
+      notes     = updNotes;
+      resources = updResources;
+      groups    = updGroups;
+      resCats   = updResCats;
+      renderHome(); renderProjects(); renderNotes();
+      renderResCats(); renderResources(q('res-search')?.value || '');
+      // Ack force pull
+      window.api.serverRequest({
+        url: `${base}/api/client/pull-ack`,
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey },
+        body: {},
+      });
+      return; // skip normal merge — we just replaced everything
+    }
+
+    // ── Normal merge pull ─────────────────────────────────────────
+    let changed = false;
+    const updProjects  = [...projects];
+    const updNotes     = [...notes];
+    const updResources = [...resources];
+    const updGroups    = [...groups];
+    const updResCats   = [...resCats];
+
+    for (const item of items) {
       if (_deletedIds.has(item.item_key)) continue; // deleted locally — skip
       let data;
       try { data = JSON.parse(item.data); } catch { continue; }

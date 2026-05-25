@@ -75,6 +75,40 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS pending_deletes (
+      id         VARCHAR(36)  PRIMARY KEY,
+      client_id  VARCHAR(36)  NOT NULL,
+      type       VARCHAR(100) NOT NULL,
+      item_key   VARCHAR(500) NOT NULL,
+      created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_pd_client (client_id),
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS snapshots (
+      id         VARCHAR(36)  PRIMARY KEY,
+      client_id  VARCHAR(36)  NOT NULL,
+      label      VARCHAR(255) NOT NULL,
+      data       LONGTEXT     NOT NULL,
+      item_count INT          DEFAULT 0,
+      created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_snap_client  (client_id),
+      INDEX idx_snap_created (created_at),
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS pending_force_pulls (
+      client_id  VARCHAR(36) PRIMARY KEY,
+      created_at DATETIME    DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
   console.log('[DB] Tables ready');
 }
 
@@ -247,6 +281,147 @@ async function purgeExpiredArchives() {
   return result.affectedRows;
 }
 
+// ─── Pending deletes ─────────────────────────────────────────────
+
+async function addPendingDelete(clientId, type, itemKey) {
+  const id = uuidv4();
+  await pool.execute(
+    'INSERT INTO pending_deletes (id, client_id, type, item_key) VALUES (?, ?, ?, ?)',
+    [id, clientId, type, itemKey],
+  );
+  return id;
+}
+
+async function getPendingDeletes(clientId) {
+  const [rows] = await pool.execute(
+    'SELECT id, type, item_key FROM pending_deletes WHERE client_id = ?',
+    [clientId],
+  );
+  return rows;
+}
+
+async function ackPendingDeletes(clientId, ids) {
+  if (!ids || !ids.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await pool.execute(
+    `DELETE FROM pending_deletes WHERE client_id = ? AND id IN (${placeholders})`,
+    [clientId, ...ids],
+  );
+}
+
+// ─── Snapshots ───────────────────────────────────────────────────
+
+async function createSnapshot(clientId, label) {
+  const items = await getClientItemsFull(clientId);
+  if (!items.length) return null; // nothing to snapshot
+  const data = JSON.stringify(items.map(i => ({ type: i.type, item_key: i.item_key, data: i.data })));
+  const id   = uuidv4();
+  await pool.execute(
+    'INSERT INTO snapshots (id, client_id, label, data, item_count) VALUES (?, ?, ?, ?, ?)',
+    [id, clientId, label, data, items.length],
+  );
+  return { id, label, item_count: items.length };
+}
+
+async function createSnapshotsForAllClients() {
+  const [clients] = await pool.execute('SELECT id, name FROM clients');
+  const label = `Auto – ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  let created = 0;
+  for (const c of clients) {
+    try {
+      const snap = await createSnapshot(c.id, label);
+      if (snap) created++;
+    } catch (err) {
+      console.error(`[Snapshot] Failed for client ${c.name}:`, err.message);
+    }
+  }
+  return created;
+}
+
+async function getClientSnapshots(clientId) {
+  const [rows] = await pool.execute(
+    'SELECT id, label, item_count, created_at FROM snapshots WHERE client_id = ? ORDER BY created_at DESC',
+    [clientId],
+  );
+  return rows;
+}
+
+async function getAllSnapshots() {
+  const [rows] = await pool.execute(`
+    SELECT s.id, s.label, s.item_count, s.created_at, c.name AS client_name, s.client_id
+    FROM snapshots s
+    LEFT JOIN clients c ON s.client_id = c.id
+    ORDER BY s.created_at DESC
+  `);
+  return rows;
+}
+
+async function getSnapshot(id) {
+  const [rows] = await pool.execute('SELECT * FROM snapshots WHERE id = ?', [id]);
+  return rows[0] || null;
+}
+
+async function deleteSnapshot(id) {
+  const [result] = await pool.execute('DELETE FROM snapshots WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
+async function restoreSnapshot(snapshotId) {
+  const snap = await getSnapshot(snapshotId);
+  if (!snap) return false;
+
+  let items;
+  try { items = JSON.parse(snap.data); } catch { return false; }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Replace all data_items with snapshot content
+    await conn.execute('DELETE FROM data_items WHERE client_id = ?', [snap.client_id]);
+    const now = new Date();
+    for (const item of items) {
+      const id = uuidv4();
+      await conn.execute(
+        `INSERT INTO data_items (id, client_id, type, item_key, data, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, snap.client_id, item.type, item.item_key, item.data, now, now],
+      );
+    }
+    // Recalculate storage
+    await conn.execute(
+      'UPDATE clients SET storage_used = (SELECT COALESCE(SUM(LENGTH(data)), 0) FROM data_items WHERE client_id = ?) WHERE id = ?',
+      [snap.client_id, snap.client_id],
+    );
+    // Signal client to force-pull
+    await conn.execute(
+      'INSERT INTO pending_force_pulls (client_id) VALUES (?) ON DUPLICATE KEY UPDATE created_at = NOW()',
+      [snap.client_id],
+    );
+    // Clear pending deletes (restore supersedes them)
+    await conn.execute('DELETE FROM pending_deletes WHERE client_id = ?', [snap.client_id]);
+    await conn.commit();
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// ─── Force pull ──────────────────────────────────────────────────
+
+async function hasPendingForcePull(clientId) {
+  const [rows] = await pool.execute(
+    'SELECT 1 FROM pending_force_pulls WHERE client_id = ?', [clientId],
+  );
+  return rows.length > 0;
+}
+
+async function clearPendingForcePull(clientId) {
+  await pool.execute('DELETE FROM pending_force_pulls WHERE client_id = ?', [clientId]);
+}
+
 // ─── Stats ────────────────────────────────────────────────────────
 
 async function getStats() {
@@ -257,6 +432,7 @@ async function getStats() {
   const [[{ totalStorage }]]  = await pool.execute('SELECT COALESCE(SUM(storage_used), 0) AS totalStorage FROM clients');
   const [[{ totalArchives }]] = await pool.execute('SELECT COUNT(*) AS totalArchives FROM archives');
   const [[{ totalItems }]]    = await pool.execute('SELECT COUNT(*) AS totalItems FROM data_items');
+  const [[{ totalSnapshots }]] = await pool.execute('SELECT COUNT(*) AS totalSnapshots FROM snapshots');
 
   return {
     totalClients,
@@ -265,6 +441,7 @@ async function getStats() {
     totalStorage,
     totalArchives,
     totalItems,
+    totalSnapshots,
   };
 }
 
@@ -287,5 +464,20 @@ module.exports = {
   getArchiveItem,
   deleteArchiveItem,
   purgeExpiredArchives,
+  // Pending deletes
+  addPendingDelete,
+  getPendingDeletes,
+  ackPendingDeletes,
+  // Snapshots
+  createSnapshot,
+  createSnapshotsForAllClients,
+  getClientSnapshots,
+  getAllSnapshots,
+  getSnapshot,
+  deleteSnapshot,
+  restoreSnapshot,
+  // Force pull
+  hasPendingForcePull,
+  clearPendingForcePull,
   getStats,
 };

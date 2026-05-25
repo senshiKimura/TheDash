@@ -85,8 +85,9 @@ function showPage(name) {
   document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
 
   if (name === 'dashboard') loadDashboard();
-  else if (name === 'clients')  loadClients();
-  else if (name === 'archives') loadArchives();
+  else if (name === 'clients')   loadClients();
+  else if (name === 'snapshots') loadSnapshots();
+  else if (name === 'archives')  loadArchives();
 }
 
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -137,10 +138,11 @@ async function loadDashboard() {
       get('/api/management/clients'),
     ]);
 
-    document.getElementById('s-total').textContent   = stats.totalClients;
-    document.getElementById('s-online').textContent  = stats.onlineClients;
-    document.getElementById('s-storage').textContent = fmtBytes(stats.totalStorage);
-    document.getElementById('s-archives').textContent= stats.totalArchives;
+    document.getElementById('s-total').textContent    = stats.totalClients;
+    document.getElementById('s-online').textContent   = stats.onlineClients;
+    document.getElementById('s-storage').textContent  = fmtBytes(stats.totalStorage);
+    document.getElementById('s-archives').textContent = stats.totalArchives;
+    document.getElementById('s-snapshots').textContent= stats.totalSnapshots ?? '—';
 
     const tbody = document.getElementById('dash-tbody');
     if (!clients.length) {
@@ -219,10 +221,11 @@ async function openClientDetail(id) {
   document.getElementById('client-detail').classList.remove('hidden');
 
   try {
-    const [{ client }, { archives }, { items }] = await Promise.all([
+    const [{ client }, { archives }, { items }, { snapshots }] = await Promise.all([
       get(`/api/management/clients/${id}`),
       get(`/api/management/archives?clientId=${id}`),
       get(`/api/management/clients/${id}/items`),
+      get(`/api/management/clients/${id}/snapshots`),
     ]);
 
     document.getElementById('detail-name').textContent = client.name;
@@ -234,22 +237,35 @@ async function openClientDetail(id) {
 
     renderDetailItems(items);
     renderDetailArchives(archives);
+    renderDetailSnapshots(snapshots, id);
   } catch (err) { console.error('Detail:', err); }
 }
 
 function renderDetailItems(items) {
   const tbody = document.getElementById('detail-items-tbody');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty">No items synced yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No items synced yet.</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(i => `
     <tr>
       <td>${esc(i.type)}</td>
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(i.item_key)}">${esc(i.item_name || i.item_key || '—')}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(i.item_key)}">${esc(i.item_name || i.item_key || '—')}</td>
       <td>${fmtBytes(i.data_size)}</td>
       <td>${fmtDate(i.updated_at)}</td>
+      <td><button class="btn btn-danger btn-sm del-item-btn" data-key="${esc(i.item_key)}" data-type="${esc(i.type)}" data-name="${esc(i.item_name || i.item_key)}">Delete</button></td>
     </tr>`).join('');
+
+  tbody.querySelectorAll('.del-item-btn').forEach(b =>
+    b.addEventListener('click', () => deleteClientItem(state.currentClientId, b.dataset.type, b.dataset.key, b.dataset.name)));
+}
+
+async function deleteClientItem(clientId, type, itemKey, name) {
+  if (!await confirm('Delete item', `Remove "${name}" (${type}) from server? The app will be notified to delete it locally on the next sync.`)) return;
+  try {
+    await del(`/api/management/clients/${clientId}/items/${encodeURIComponent(itemKey)}?type=${encodeURIComponent(type)}`);
+    openClientDetail(clientId);
+  } catch (err) { alert('Failed: ' + err.message); }
 }
 
 function renderDetailArchives(archives) {
@@ -281,7 +297,52 @@ function renderDetailArchives(archives) {
     }));
 }
 
+function renderDetailSnapshots(snapshots, clientId) {
+  const tbody = document.getElementById('detail-snapshots-tbody');
+  const count = document.getElementById('detail-snapshots-count');
+  if (count) count.textContent = snapshots.length ? `(${snapshots.length})` : '';
+  if (!snapshots.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No snapshots yet. The first automatic snapshot will be created at 23:55.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = snapshots.map(s => `
+    <tr>
+      <td>${esc(s.label)}</td>
+      <td>${s.item_count}</td>
+      <td>${fmtDate(s.created_at)}</td>
+      <td class="row-gap">
+        <button class="btn btn-warning btn-sm restore-snap-btn" data-id="${esc(s.id)}" data-label="${esc(s.label)}">Restore</button>
+        <button class="btn btn-danger btn-sm del-snap-btn" data-id="${esc(s.id)}">Delete</button>
+      </td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('.restore-snap-btn').forEach(b =>
+    b.addEventListener('click', async () => {
+      if (!await confirm('Restore snapshot', `Restore "${b.dataset.label}"? This will replace ALL current data for this client. The app will sync the restored data on the next pull.`)) return;
+      try {
+        await post(`/api/management/snapshots/${b.dataset.id}/restore`, {});
+        alert('Snapshot restored. The app will apply it on the next sync.');
+        openClientDetail(state.currentClientId);
+      } catch (err) { alert('Failed: ' + err.message); }
+    }));
+
+  tbody.querySelectorAll('.del-snap-btn').forEach(b =>
+    b.addEventListener('click', async () => {
+      if (!await confirm('Delete snapshot', 'Permanently delete this snapshot?')) return;
+      try { await del(`/api/management/snapshots/${b.dataset.id}`); openClientDetail(state.currentClientId); }
+      catch (err) { alert('Failed: ' + err.message); }
+    }));
+}
+
 document.getElementById('back-clients').addEventListener('click', () => { showClientsListView(); loadClients(); });
+
+document.getElementById('detail-snapshot-btn').addEventListener('click', async () => {
+  try {
+    const { snapshot } = await post(`/api/management/clients/${state.currentClientId}/snapshots`, {});
+    alert(`Snapshot created: ${snapshot.label} (${snapshot.item_count} items)`);
+    openClientDetail(state.currentClientId);
+  } catch (err) { alert('Failed: ' + err.message); }
+});
 
 document.getElementById('detail-del-client').addEventListener('click', async () => {
   const c = state.clients.find(x => x.id === state.currentClientId);
@@ -293,6 +354,68 @@ document.getElementById('detail-del-data').addEventListener('click', async () =>
   try { await del(`/api/management/clients/${state.currentClientId}/data`); openClientDetail(state.currentClientId); }
   catch (err) { alert('Failed: ' + err.message); }
 });
+
+// ─── Snapshots page ───────────────────────────────────────────────
+
+async function loadSnapshots() {
+  try {
+    const [{ snapshots }, { clients }] = await Promise.all([
+      get('/api/management/snapshots'),
+      get('/api/management/clients'),
+    ]);
+
+    const sel = document.getElementById('snap-filter');
+    sel.innerHTML = '<option value="">All clients</option>' +
+      clients.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+
+    renderSnapshotsTable(snapshots);
+  } catch (err) { console.error('Snapshots:', err); }
+}
+
+function renderSnapshotsTable(snapshots) {
+  const tbody = document.getElementById('snapshots-tbody');
+  if (!snapshots.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No snapshots yet. They are created automatically at 23:55 each day.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = snapshots.map(s => `
+    <tr>
+      <td>${esc(s.client_name || s.client_id)}</td>
+      <td>${esc(s.label)}</td>
+      <td>${s.item_count}</td>
+      <td>${fmtDate(s.created_at)}</td>
+      <td class="row-gap">
+        <button class="btn btn-warning btn-sm snap-restore-btn" data-id="${esc(s.id)}" data-label="${esc(s.label)}">Restore</button>
+        <button class="btn btn-danger btn-sm snap-del-btn" data-id="${esc(s.id)}">Delete</button>
+      </td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('.snap-restore-btn').forEach(b =>
+    b.addEventListener('click', async () => {
+      if (!await confirm('Restore snapshot', `Restore "${b.dataset.label}"? This will replace ALL current data for this client. The app will sync the restored data on the next pull.`)) return;
+      try {
+        await post(`/api/management/snapshots/${b.dataset.id}/restore`, {});
+        alert('Snapshot restored. The app will apply it on the next sync.');
+        loadSnapshots();
+      } catch (err) { alert('Failed: ' + err.message); }
+    }));
+
+  tbody.querySelectorAll('.snap-del-btn').forEach(b =>
+    b.addEventListener('click', async () => {
+      if (!await confirm('Delete snapshot', 'Permanently delete this snapshot?')) return;
+      try { await del(`/api/management/snapshots/${b.dataset.id}`); loadSnapshots(); }
+      catch (err) { alert('Failed: ' + err.message); }
+    }));
+}
+
+document.getElementById('snap-filter').addEventListener('change', async e => {
+  const clientId = e.target.value;
+  const url = clientId ? `/api/management/snapshots?clientId=${clientId}` : '/api/management/snapshots';
+  try { const { snapshots } = await get(url); renderSnapshotsTable(snapshots); }
+  catch (err) { console.error(err); }
+});
+
+document.getElementById('refresh-snapshots').addEventListener('click', loadSnapshots);
 
 // ─── Archives ─────────────────────────────────────────────────────
 

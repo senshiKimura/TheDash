@@ -804,6 +804,7 @@
         <div class="settings-tabbar">
           <button class="settings-tab active" data-stab="general">Général</button>
           <button class="settings-tab" data-stab="serveur">Serveur</button>
+          <button class="settings-tab" data-stab="theme">Thème</button>
         </div>
 
         <!-- ── Pane: Général ── -->
@@ -896,6 +897,54 @@
             </div>
           </div>
         </div>
+
+        <!-- ── Pane: Thème ── -->
+        <div class="settings-tab-pane" id="stab-theme">
+          <div class="settings-section">
+            <div class="settings-section-title">Thème prédéfini</div>
+            <div class="theme-preset-grid">
+              <button class="theme-preset-btn" data-theme="light">
+                <div class="theme-mini-preview theme-mini-light"></div>
+                <span>☀️ Clair</span>
+              </button>
+              <button class="theme-preset-btn" data-theme="dark">
+                <div class="theme-mini-preview theme-mini-dark"></div>
+                <span>🌙 Sombre</span>
+              </button>
+              <button class="theme-preset-btn" data-theme="hacker">
+                <div class="theme-mini-preview theme-mini-hacker"></div>
+                <span>💻 Hacker</span>
+              </button>
+              <button class="theme-preset-btn" data-theme="custom">
+                <div class="theme-mini-preview theme-mini-custom" id="theme-mini-custom-preview"></div>
+                <span>🎨 Perso</span>
+              </button>
+            </div>
+          </div>
+          <div class="settings-section" id="custom-theme-section">
+            <div class="settings-section-title">Couleurs rapides</div>
+            <div class="theme-color-rows">
+              <div class="theme-color-row">
+                <label>Arrière-plan</label>
+                <input type="color" id="theme-color-bg" value="#f5f7ff">
+                <span id="theme-color-bg-val">#f5f7ff</span>
+              </div>
+              <div class="theme-color-row">
+                <label>Texte</label>
+                <input type="color" id="theme-color-text" value="#0f172a">
+                <span id="theme-color-text-val">#0f172a</span>
+              </div>
+              <div class="theme-color-row">
+                <label>Accent</label>
+                <input type="color" id="theme-color-accent" value="#2563eb">
+                <span id="theme-color-accent-val">#2563eb</span>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:14px">
+              <button class="btn-primary" id="btn-apply-custom-theme">Appliquer</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -968,6 +1017,7 @@
         <button class="pom-phase-btn active" data-phase="work">Travail</button>
         <button class="pom-phase-btn" data-phase="break">Pause</button>
       </div>
+      <button class="pom-settings-btn" id="pom-settings-btn" title="Paramètres">⚙</button>
       <button class="pom-close-btn" id="pom-close">✕</button>
     </div>
     <div class="pom-body">
@@ -990,6 +1040,12 @@
       <button id="pom-start" class="pom-ctrl-btn pom-main-btn">▶ Démarrer</button>
       <button id="pom-skip" class="pom-ctrl-btn" title="Sauter">⏭</button>
     </div>
+    <div id="pom-settings-panel" class="pom-settings-panel hidden">
+      <div class="pom-set-row"><label>Travail</label><input type="number" id="pom-set-work" min="1" max="120" value="25"> min</div>
+      <div class="pom-set-row"><label>Pause</label><input type="number" id="pom-set-break" min="1" max="60" value="5"> min</div>
+      <div class="pom-set-row"><label>Longue pause</label><input type="number" id="pom-set-longbreak" min="1" max="60" value="15"> min</div>
+      <button id="pom-set-save" class="pom-set-save-btn">Appliquer</button>
+    </div>
   </div>
 
   <!-- ══ MODE FOCUS ══ -->
@@ -1000,6 +1056,11 @@
       <h1 class="focus-task-title" id="focus-task-title"></h1>
       <p class="focus-task-desc" id="focus-task-desc"></p>
       <div class="focus-timer-wrap">
+        <div class="focus-dur-row" id="focus-dur-row">
+          <button class="focus-dur-btn" id="focus-dur-minus">-5</button>
+          <span id="focus-dur-val">25</span><span class="focus-dur-unit"> min</span>
+          <button class="focus-dur-btn" id="focus-dur-plus">+5</button>
+        </div>
         <div class="focus-timer-display" id="focus-timer-display">25:00</div>
         <div class="focus-timer-btns">
           <button class="focus-btn-main" id="focus-pom-toggle">▶ Démarrer</button>

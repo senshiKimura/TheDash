@@ -70,10 +70,36 @@ router.post('/archive', clientAuth, async (req, res) => {
 // ─── GET /api/client/sync ─────────────────────────────────────────
 router.get('/sync', clientAuth, async (req, res) => {
   try {
-    const items = await db.getClientItemsFull(req.client.id);
-    res.json({ items });
+    const [items, pendingDeletes, forcePull] = await Promise.all([
+      db.getClientItemsFull(req.client.id),
+      db.getPendingDeletes(req.client.id),
+      db.hasPendingForcePull(req.client.id),
+    ]);
+    res.json({ items, pendingDeletes, forcePull });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch sync data' });
+  }
+});
+
+// ─── POST /api/client/deletes/ack ─────────────────────────────────
+router.post('/deletes/ack', clientAuth, async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+  try {
+    await db.ackPendingDeletes(req.client.id, ids);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Ack failed' });
+  }
+});
+
+// ─── POST /api/client/pull-ack ────────────────────────────────────
+router.post('/pull-ack', clientAuth, async (req, res) => {
+  try {
+    await db.clearPendingForcePull(req.client.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Pull ack failed' });
   }
 });
 
