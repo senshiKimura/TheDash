@@ -410,6 +410,15 @@ async function init() {
   on('btn-server-check', 'click', checkServerConnection);
   on('btn-server-register', 'click', registerServerClient);
   on('btn-server-sync', 'click', syncToServer);
+  // Updater
+  on('btn-check-updates', 'click', checkForUpdates);
+  on('btn-apply-update', 'click', applyUpdate);
+  if (window.api.onUpdateProgress) {
+    window.api.onUpdateProgress((msg) => {
+      const log = q('update-progress-log');
+      if (log) { log.textContent += msg; log.scrollTop = log.scrollHeight; }
+    });
+  }
   const dz = q('res-drop-zone');
   dz.addEventListener('click', addFilesToResources);
   dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
@@ -2705,6 +2714,94 @@ async function clearAvatar() {
 function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b.dataset.stab === tab));
   document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.toggle('active', p.id === `stab-${tab}`));
+}
+
+// ══ AUTO-UPDATER ═══════════════════════════════════════════════════
+async function checkForUpdates() {
+  const btn = q('btn-check-updates');
+  const badge = q('update-status-badge');
+  const applyBtn = q('btn-apply-update');
+  const changedSection = q('update-changed-section');
+  const changedList = q('update-changed-list');
+  const lastMsg = q('update-last-commit-msg');
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Vérification…'; }
+  if (badge) { badge.style.display = 'none'; }
+  if (applyBtn) applyBtn.style.display = 'none';
+  if (changedSection) changedSection.style.display = 'none';
+
+  const res = await window.api.checkForUpdates();
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Vérifier les mises à jour'; }
+
+  if (!res.ok) {
+    if (badge) {
+      badge.style.display = '';
+      badge.style.color = 'var(--danger, #ef4444)';
+      badge.textContent = '⚠ ' + res.error;
+    }
+    return;
+  }
+
+  const currentShaEl = q('update-current-sha');
+  const latestShaEl  = q('update-latest-sha');
+  if (currentShaEl) currentShaEl.textContent = res.currentSha;
+  if (latestShaEl)  latestShaEl.textContent  = res.latestSha;
+
+  if (badge) {
+    badge.style.display = '';
+    if (res.hasUpdate) {
+      badge.style.color = '#f59e0b';
+      badge.textContent = `🔄 Mise à jour disponible (${res.commitCount} commit${res.commitCount > 1 ? 's' : ''})`;
+    } else {
+      badge.style.color = 'var(--success, #10b981)';
+      badge.textContent = '✅ L\'application est à jour';
+    }
+  }
+
+  if (lastMsg && res.latestMessage) {
+    lastMsg.style.display = '';
+    lastMsg.textContent = `Dernier commit : "${res.latestMessage}"`;
+  }
+
+  if (res.hasUpdate && res.changedFiles?.length) {
+    if (changedSection) changedSection.style.display = '';
+    if (changedList) {
+      const statusIcon = { added: '➕', modified: '✏️', removed: '🗑️', renamed: '🔀' };
+      changedList.innerHTML = res.changedFiles.map(f => `
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:3px 6px;border-radius:5px;background:var(--card-bg)">
+          <span title="${f.status}">${statusIcon[f.status] || '📄'}</span>
+          <code style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</code>
+        </div>`).join('');
+    }
+    if (applyBtn) applyBtn.style.display = '';
+  }
+}
+
+async function applyUpdate() {
+  const applyBtn = q('btn-apply-update');
+  const checkBtn = q('btn-check-updates');
+  const progressSection = q('update-progress-section');
+  const log = q('update-progress-log');
+
+  if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = 'Mise à jour en cours…'; }
+  if (checkBtn) checkBtn.disabled = true;
+  if (progressSection) progressSection.style.display = '';
+  if (log) log.textContent = '';
+
+  const res = await window.api.applyUpdate();
+
+  if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '⬇ Installer la mise à jour'; }
+  if (checkBtn) checkBtn.disabled = false;
+
+  if (res.ok) {
+    if (applyBtn) applyBtn.style.display = 'none';
+    const badge = q('update-status-badge');
+    if (badge) {
+      badge.style.color = 'var(--success, #10b981)';
+      badge.textContent = '✅ Mise à jour installée — relancez TheDash';
+    }
+  }
 }
 
 // ══ SERVER SYNC ════════════════════════════════════════════════════

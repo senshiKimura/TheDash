@@ -42,5 +42,8 @@ contextBridge.exposeInMainWorld('api', {
   saveWeeklyReview: (r) => ipcRenderer.invoke('save-weekly-review', r),
   openProjectWindow: (id) => ipcRenderer.invoke('open-project-window', id),
   onGotoProject: (cb) => ipcRenderer.on('goto-project', (_, id) => cb(id)),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  applyUpdate: () => ipcRenderer.invoke('apply-update'),
+  onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_, msg) => cb(msg)),
 });
 

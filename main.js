@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const { spawn } = require('child_process');
 const { google } = require('googleapis');
 
 // Force Windows taskbar to use our icon instead of electron.exe
@@ -398,5 +399,131 @@ ipcMain.handle('google-disconnect', () => {
   save('google-tokens', null);
   if (googleClient) { googleClient.revokeCredentials().catch(() => {}); googleClient = null; }
   return { ok: true };
+});
+
+// ── Auto-updater (GitHub + git pull + rebuild) ────────────────────────────────
+const GITHUB_REPO = 'senshiKimura/TheDash';
+const UPDATE_INSTALL_DIR = path.join(
+  process.env.HOME || process.env.USERPROFILE || '',
+  '.local', 'share', 'thedash'
+);
+const UPDATE_APPIMAGE_DEST = path.join(
+  process.env.HOME || process.env.USERPROFILE || '',
+  '.local', 'bin', 'thedash.AppImage'
+);
+
+function githubApiGet(apiPath) {
+  return new Promise((resolve) => {
+    const opts = {
+      hostname: 'api.github.com',
+      path: apiPath,
+      method: 'GET',
+      headers: { 'User-Agent': 'TheDash-Updater/1.0', 'Accept': 'application/vnd.github.v3+json' },
+      timeout: 10000,
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try { resolve({ ok: true, data: JSON.parse(data) }); }
+        catch { resolve({ ok: false, error: 'JSON invalide' }); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Timeout' }); });
+    req.on('error', (e) => resolve({ ok: false, error: e.message }));
+    req.end();
+  });
+}
+
+ipcMain.handle('check-for-updates', async () => {
+  // Get current SHA from local git repo
+  const currentSha = await new Promise((resolve) => {
+    const proc = spawn('git', ['-C', UPDATE_INSTALL_DIR, 'rev-parse', 'HEAD']);
+    let out = '';
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.on('close', (code) => resolve(code === 0 ? out.trim() : null));
+    proc.on('error', () => resolve(null));
+  });
+
+  if (!currentSha) {
+    return { ok: false, error: 'Répertoire source introuvable. Installez via install.sh d\'abord.' };
+  }
+
+  // Get latest commit on main from GitHub
+  const latestRes = await githubApiGet(`/repos/${GITHUB_REPO}/commits/main`);
+  if (!latestRes.ok || !latestRes.data?.sha) {
+    return { ok: false, error: 'Impossible de contacter GitHub. Vérifiez votre connexion.' };
+  }
+  const latestSha = latestRes.data.sha;
+  const hasUpdate = currentSha !== latestSha;
+
+  let changedFiles = [];
+  let commitCount = 0;
+
+  if (hasUpdate) {
+    const compareRes = await githubApiGet(
+      `/repos/${GITHUB_REPO}/compare/${currentSha}...${latestSha}`
+    );
+    if (compareRes.ok && compareRes.data?.files) {
+      changedFiles = compareRes.data.files.map((f) => ({
+        name: f.filename,
+        status: f.status, // added | modified | removed | renamed
+      }));
+      commitCount = compareRes.data?.total_commits || 0;
+    }
+  }
+
+  return {
+    ok: true,
+    hasUpdate,
+    currentSha: currentSha.slice(0, 7),
+    latestSha: latestSha.slice(0, 7),
+    changedFiles,
+    commitCount,
+    latestMessage: latestRes.data?.commit?.message?.split('\n')[0] || '',
+  };
+});
+
+ipcMain.handle('apply-update', async () => {
+  const sendProgress = (msg) => {
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('update-progress', msg);
+    }
+  };
+
+  const runStep = (cmd, args, cwd) => new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, { cwd, env: { ...process.env } });
+    proc.stdout.on('data', (d) => sendProgress(d.toString()));
+    proc.stderr.on('data', (d) => sendProgress(d.toString()));
+    proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`Échec (code ${code})`))));
+    proc.on('error', (e) => reject(e));
+  });
+
+  try {
+    sendProgress('→ Récupération des mises à jour depuis GitHub...\n');
+    await runStep('git', ['-C', UPDATE_INSTALL_DIR, 'pull', '--ff-only'], UPDATE_INSTALL_DIR);
+
+    sendProgress('→ Vérification des dépendances...\n');
+    await runStep('npm', ['install', '--silent'], UPDATE_INSTALL_DIR);
+
+    sendProgress('→ Build AppImage (peut prendre une minute)...\n');
+    await runStep('npm', ['run', 'build:linux'], UPDATE_INSTALL_DIR);
+
+    // Find the built AppImage
+    const distDir = path.join(UPDATE_INSTALL_DIR, 'dist');
+    const appImages = fs.readdirSync(distDir).filter((f) => f.endsWith('.AppImage'));
+    if (!appImages.length) throw new Error('AppImage non trouvé dans dist/ après le build.');
+
+    const builtAppImage = path.join(distDir, appImages[0]);
+    sendProgress(`→ Installation de ${appImages[0]}...\n`);
+    fs.copyFileSync(builtAppImage, UPDATE_APPIMAGE_DEST);
+    fs.chmodSync(UPDATE_APPIMAGE_DEST, 0o755);
+
+    sendProgress('✅ Mise à jour terminée ! Veuillez relancer TheDash.\n');
+    return { ok: true };
+  } catch (e) {
+    sendProgress(`❌ Erreur : ${e.message}\n`);
+    return { ok: false, error: e.message };
+  }
 });
 

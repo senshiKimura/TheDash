@@ -805,6 +805,7 @@
           <button class="settings-tab active" data-stab="general">Général</button>
           <button class="settings-tab" data-stab="serveur">Serveur</button>
           <button class="settings-tab" data-stab="theme">Thème</button>
+          <button class="settings-tab" data-stab="update">Mise à jour</button>
         </div>
 
         <!-- ── Pane: Général ── -->
@@ -943,6 +944,49 @@
             <div style="display:flex;justify-content:flex-end;margin-top:14px">
               <button class="btn-primary" id="btn-apply-custom-theme">Appliquer</button>
             </div>
+          </div>
+        </div>
+
+        <!-- ── Pane: Mise à jour ── -->
+        <div class="settings-tab-pane" id="stab-update">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              Mise à jour automatique
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-top:10px">
+              <div id="update-version-info" style="flex:1;min-width:180px">
+                <div style="font-size:12px;color:var(--text3);line-height:1.9">
+                  <span>Version locale&nbsp;:</span> <code id="update-current-sha" style="font-size:11px;background:var(--card-bg);padding:2px 6px;border-radius:4px">—</code><br>
+                  <span>Version GitHub&nbsp;:</span> <code id="update-latest-sha" style="font-size:11px;background:var(--card-bg);padding:2px 6px;border-radius:4px">—</code>
+                </div>
+                <div id="update-status-badge" style="margin-top:10px;font-size:12px;font-weight:600;display:none"></div>
+                <div id="update-last-commit-msg" style="margin-top:6px;font-size:11px;color:var(--text3);font-style:italic;display:none"></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
+                <button class="btn-primary" id="btn-check-updates">Vérifier les mises à jour</button>
+                <button class="btn-secondary" id="btn-apply-update" style="display:none">⬇ Installer la mise à jour</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Changed files list -->
+          <div class="settings-section" id="update-changed-section" style="display:none">
+            <div class="settings-section-title">Fichiers modifiés</div>
+            <div id="update-changed-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:140px;overflow-y:auto"></div>
+          </div>
+
+          <!-- Progress log -->
+          <div class="settings-section" id="update-progress-section" style="display:none">
+            <div class="settings-section-title">Progression</div>
+            <pre id="update-progress-log" style="margin-top:8px;font-size:11px;line-height:1.6;color:var(--text2);background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;max-height:180px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"></pre>
+          </div>
+
+          <div class="settings-section" style="padding-top:0;border:none">
+            <p style="font-size:11px;color:var(--text3);line-height:1.6;margin:0">
+              La mise à jour utilise <strong>git pull</strong> pour ne télécharger que les fichiers modifiés,<br>
+              puis rebuild l'AppImage. Nécessite <code>~/.local/share/thedash/</code> installé via <code>install.sh</code>.
+            </p>
           </div>
         </div>
       </div>
