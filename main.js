@@ -84,6 +84,7 @@ app.whenReady().then(() => {
   createTray();
   startReminderLoop();
   startVeilleRefreshLoop();
+  startVeilleArchiveScheduler();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' && app.isQuitting) app.quit(); });
 
@@ -660,6 +661,44 @@ async function refreshAllVeilleFeeds() {
   return results;
 }
 
+function runVeilleArchiveCleanup() {
+  const settings = load('veille-archive-settings', { archiveDays: 30, maxUnreadDays: 0 });
+  const now = Date.now();
+  let arts = load('veille-articles', []);
+
+  if (settings.archiveDays === 0) {
+    arts = arts.filter(a => !a.read);
+  } else if (settings.archiveDays > 0) {
+    const cutoff = now - settings.archiveDays * 86400000;
+    arts = arts.filter(a => {
+      if (!a.read) return true;
+      const d = new Date(a.readAt || a.fetchedAt || a.pubDate || 0).getTime();
+      return d > cutoff;
+    });
+  }
+
+  if (settings.maxUnreadDays > 0) {
+    const unreadCutoff = now - settings.maxUnreadDays * 86400000;
+    arts = arts.filter(a => {
+      if (a.read) return true;
+      const d = new Date(a.fetchedAt || a.pubDate || 0).getTime();
+      return d > unreadCutoff;
+    });
+  }
+
+  save('veille-articles', arts);
+}
+
+function startVeilleArchiveScheduler() {
+  runVeilleArchiveCleanup();
+  setInterval(() => {
+    const settings = load('veille-archive-settings', { archiveDays: 30, archiveTime: '02:00', maxUnreadDays: 0 });
+    const now = new Date();
+    const [h, m] = (settings.archiveTime || '02:00').split(':').map(Number);
+    if (now.getHours() === h && now.getMinutes() === m) runVeilleArchiveCleanup();
+  }, 60000);
+}
+
 function startVeilleRefreshLoop() {
   const maybeFetch = async () => {
     const last = load('veille-last-refresh', 0);
@@ -711,7 +750,8 @@ ipcMain.handle('veille-get-articles', (_, opts = {}) => {
 ipcMain.handle('veille-mark-read', (_, ids) => {
   const arts = load('veille-articles', []);
   const set = new Set(Array.isArray(ids) ? ids : [ids]);
-  arts.forEach(a => { if (set.has(a.id)) a.read = true; });
+  const now = new Date().toISOString();
+  arts.forEach(a => { if (set.has(a.id)) { a.read = true; if (!a.readAt) a.readAt = now; } });
   save('veille-articles', arts); return true;
 });
 
@@ -740,4 +780,27 @@ ipcMain.handle('veille-test-feed', async (_, url) => {
 });
 
 ipcMain.handle('veille-get-last-refresh', () => load('veille-last-refresh', 0));
+
+ipcMain.handle('veille-mark-unread', (_, ids) => {
+  const arts = load('veille-articles', []);
+  const set = new Set(Array.isArray(ids) ? ids : [ids]);
+  arts.forEach(a => { if (set.has(a.id)) { a.read = false; delete a.readAt; } });
+  save('veille-articles', arts); return true;
+});
+
+ipcMain.handle('veille-transfer-to-note', (_, noteData) => {
+  const notes = load('notes', []);
+  notes.unshift(noteData);
+  save('notes', notes); return true;
+});
+
+ipcMain.handle('veille-get-archive-settings', () =>
+  load('veille-archive-settings', { archiveDays: 30, archiveTime: '02:00', maxUnreadDays: 0 })
+);
+
+ipcMain.handle('veille-save-archive-settings', (_, settings) => {
+  save('veille-archive-settings', settings); return settings;
+});
+
+ipcMain.handle('veille-run-archive-cleanup', () => { runVeilleArchiveCleanup(); return true; });
 

@@ -800,37 +800,33 @@ function renderHomeV2() {
     }
   }
 
-  // Agenda / alerts panel
+  // Recent veille articles
   const agendaEl = q('v2-agenda-list');
   if (agendaEl) {
-    const items = [];
-    // Upcoming project deadlines
-    projects.filter(p => p.deadline && p.status !== 'termine')
-      .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
-      .slice(0, 3).forEach(p => {
-        const d = daysUntil(p.deadline);
-        const cls = d < 0 ? 'danger' : d <= 3 ? 'warn' : 'ok';
-        items.push({ cls, text: escHtml(p.title), sub: d < 0 ? `En retard de ${-d}j` : d === 0 ? "Aujourd'hui !" : `Dans ${d} jour${d > 1 ? 's' : ''}`, pid: p.id });
-      });
-    // Urgent tasks
-    for (const p of projects) {
-      for (const t of (p.tasks || [])) {
-        if (t.status !== 'done' && t.priority === 'high' && !t.deadline) {
-          items.push({ cls: 'warn', text: escHtml(t.title), sub: `Haute priorité · ${escHtml(p.title)}`, pid: p.id });
-        }
-      }
-    }
-    if (!items.length) {
-      agendaEl.innerHTML = '<div class="v2-info-empty">Aucun événement pour le moment</div>';
+    if (!veilleArticles.length) {
+      agendaEl.innerHTML = '<div class="v2-info-empty">Aucun article — configurez des flux RSS dans Veille</div>';
     } else {
-      agendaEl.innerHTML = items.map(it => `
-        <div class="v2-agenda-item v2-agenda-${it.cls}"${it.pid ? ` data-pid="${it.pid}"` : ''}>
-          <div class="v2-agenda-dot"></div>
-          <div><div class="v2-agenda-text">${it.text}</div><div class="v2-agenda-sub">${it.sub}</div></div>
-        </div>`).join('');
-      agendaEl.querySelectorAll('[data-pid]').forEach(el => {
+      const recent = [...veilleArticles]
+        .sort((a, b) => new Date(b.pubDate || b.fetchedAt || 0) - new Date(a.pubDate || a.fetchedAt || 0))
+        .slice(0, 6);
+      agendaEl.innerHTML = recent.map(art => {
+        const cat = veilleCategories.find(c => c.id === art.categoryId);
+        const dotStyle = cat ? `background:${cat.color}` : 'background:var(--text3)';
+        return `<div class="v2-agenda-item v2-veille-recent${art.read ? ' v2-veille-read' : ''}"
+                  data-art-catid="${art.categoryId || 'all'}" title="${escHtml(art.feedName || '')}">
+          <div class="v2-agenda-dot" style="${dotStyle}"></div>
+          <div class="v2-agenda-text v2-veille-title">${escHtml(art.title)}</div>
+        </div>`;
+      }).join('');
+      agendaEl.querySelectorAll('[data-art-catid]').forEach(el => {
         el.style.cursor = 'pointer';
-        el.addEventListener('click', () => openProjectDetail(el.dataset.pid));
+        el.addEventListener('click', () => {
+          veilleActiveCat = el.dataset.artCatid;
+          veillePage = 0;
+          navTo('veille');
+          renderVeilleCatsBar();
+          renderVeilleFeed();
+        });
       });
     }
   }
@@ -842,10 +838,16 @@ function renderHomeV2() {
       notesEl.innerHTML = '<div class="v2-notes-empty">Aucune note rapide</div>';
     } else {
       notesEl.innerHTML = notes.slice(0, 6).map(n => `
-        <div class="v2-note-chip" style="background:${n.color || '#fef9c3'}">
+        <div class="v2-note-chip" data-note-id="${n.id}" style="background:${n.color || '#fef9c3'};cursor:pointer" title="Cliquer pour modifier">
           <div class="v2-note-title">${escHtml(n.title || 'Note')}</div>
-          <div class="v2-note-body">${escHtml((n.content || '').slice(0, 80))}${(n.content?.length || 0) > 80 ? '…' : ''}</div>
+          <div class="v2-note-body">${escHtml((n.content || '').replace(/<[^>]*>/g, '').slice(0, 80))}${((n.content || '').replace(/<[^>]*>/g, '').length) > 80 ? '…' : ''}</div>
         </div>`).join('');
+      notesEl.querySelectorAll('[data-note-id]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const note = notes.find(n => n.id === chip.dataset.noteId);
+          if (note) openNoteModal(note);
+        });
+      });
     }
   }
 
@@ -3172,7 +3174,10 @@ function startAutoSync() {
 let veilleCategories = [];
 let veilleFeeds = [];
 let veilleArticles = [];
-let veilleActiveCat = 'all'; // 'all' | categoryId
+let veilleActiveCat = 'all'; // 'all' | 'archives' | 'none' | categoryId
+let veilleSearchQuery = '';
+let veillePage = 0;
+let veilleCtxArticleId = null;
 let editingVeilleCatId = null;
 let editingVeilleFeedId = null;
 let selectedVeilleCatColor = '#2563eb';
@@ -3196,6 +3201,27 @@ async function initVeille() {
   on('btn-veille-feed-save', 'click', saveVeilleFeed);
   on('btn-veille-test-feed', 'click', testVeilleFeed);
 
+  // Search bar
+  const searchInput = q('veille-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      veilleSearchQuery = searchInput.value.trim().toLowerCase();
+      veillePage = 0;
+      renderVeilleFeed();
+    });
+  }
+
+  // Context menu
+  const ctxMenu = document.getElementById('veille-context-menu');
+  document.addEventListener('click', () => { if (ctxMenu) ctxMenu.style.display = 'none'; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ctxMenu) ctxMenu.style.display = 'none'; });
+  document.getElementById('veille-ctx-transfer')?.addEventListener('click', () => {
+    if (veilleCtxArticleId) transferToNote(veilleCtxArticleId);
+  });
+  document.getElementById('veille-ctx-unread')?.addEventListener('click', () => {
+    if (veilleCtxArticleId) markArticleUnread(veilleCtxArticleId);
+  });
+
   // Color picker in category modal
   document.querySelectorAll('#veille-cat-color-picker .color-opt').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -3211,6 +3237,7 @@ async function initVeille() {
       await loadVeilleData();
       renderVeilleFeed();
       renderVeilleBadge();
+      renderHome();
     });
   }
 
@@ -3218,6 +3245,7 @@ async function initVeille() {
   renderVeilleCatsBar();
   renderVeilleFeed();
   renderVeilleBadge();
+  renderHome();
 }
 
 async function loadVeilleData() {
@@ -3263,10 +3291,17 @@ function renderVeilleCatsBar() {
     </button>`;
   }
 
+  // Archives pill (read articles)
+  const archiveCount = veilleArticles.filter(a => a.read).length;
+  html += `<button class="veille-cat-pill veille-cat-pill-archive ${veilleActiveCat === 'archives' ? 'active' : ''}" data-catid="archives">
+    🗄 Archives <span class="veille-pill-count">${archiveCount}</span>
+  </button>`;
+
   bar.innerHTML = html;
   bar.querySelectorAll('.veille-cat-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       veilleActiveCat = btn.dataset.catid;
+      veillePage = 0;
       renderVeilleCatsBar();
       renderVeilleFeed();
     });
@@ -3305,12 +3340,51 @@ function renderVeilleFeed() {
   const container = q('veille-feed');
   if (!container) return;
 
+  const isArchive = veilleActiveCat === 'archives';
+  const PAGE_SIZE = 10;
+
+  // Base filter
   let filtered = veilleArticles;
-  if (veilleActiveCat === 'none') filtered = filtered.filter(a => !a.categoryId);
-  else if (veilleActiveCat !== 'all') filtered = filtered.filter(a => a.categoryId === veilleActiveCat);
+  if (isArchive) {
+    filtered = filtered.filter(a => a.read);
+  } else {
+    // In normal view hide read articles unless searching
+    if (!veilleSearchQuery) filtered = filtered.filter(a => !a.read);
+    if (veilleActiveCat === 'none') filtered = filtered.filter(a => !a.categoryId);
+    else if (veilleActiveCat !== 'all') filtered = filtered.filter(a => a.categoryId === veilleActiveCat);
+  }
+
+  // Search filter (across all categories when query present)
+  if (veilleSearchQuery) {
+    const q2 = veilleSearchQuery;
+    filtered = veilleArticles.filter(a =>
+      (a.title || '').toLowerCase().includes(q2) ||
+      (a.description || '').toLowerCase().includes(q2) ||
+      (a.feedName || '').toLowerCase().includes(q2)
+    );
+  }
+
+  // Sort newest first
+  filtered = [...filtered].sort((a, b) => {
+    const da = new Date(a.pubDate || a.fetchedAt || 0).getTime();
+    const db = new Date(b.pubDate || b.fetchedAt || 0).getTime();
+    return db - da;
+  });
 
   if (!filtered.length) {
-    if (!veilleFeeds.length) {
+    if (isArchive) {
+      container.innerHTML = `<div class="veille-empty">
+        <div style="font-size:48px;margin-bottom:12px">🗄</div>
+        <h3>Aucun article archivé</h3>
+        <p>Les articles lus apparaîtront ici.</p>
+      </div>`;
+    } else if (veilleSearchQuery) {
+      container.innerHTML = `<div class="veille-empty">
+        <div style="font-size:48px;margin-bottom:12px">🔍</div>
+        <h3>Aucun résultat</h3>
+        <p>Aucun article ne correspond à «&nbsp;${veilleSearchQuery}&nbsp;».</p>
+      </div>`;
+    } else if (!veilleFeeds.length) {
       container.innerHTML = `<div class="veille-empty">
         <div style="font-size:48px;margin-bottom:12px">📡</div>
         <h3>Aucune source configurée</h3>
@@ -3319,22 +3393,30 @@ function renderVeilleFeed() {
       </div>`;
     } else {
       container.innerHTML = `<div class="veille-empty">
-        <div style="font-size:48px;margin-bottom:12px">🔄</div>
-        <h3>Aucun article</h3>
-        <p>Cliquez sur Actualiser pour récupérer les derniers articles.</p>
+        <div style="font-size:48px;margin-bottom:12px">✅</div>
+        <h3>Tout est lu !</h3>
+        <p>Actualisez pour récupérer de nouveaux articles.</p>
       </div>`;
     }
     return;
   }
 
+  // Pagination for archives (and search results)
+  const usePagination = isArchive || veilleSearchQuery;
+  const totalPages = usePagination ? Math.ceil(filtered.length / PAGE_SIZE) : 1;
+  const currentPage = Math.min(veillePage, totalPages - 1);
+  const pageItems = usePagination ? filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE) : filtered;
+
   // Group by date
   const groups = {};
-  filtered.forEach(a => {
+  pageItems.forEach(a => {
     const d = a.pubDate ? new Date(a.pubDate) : new Date(a.fetchedAt);
-    const label = isNaN(d) ? 'Date inconnue' : formatVeilleDate(d);
+    const label = isNaN(d) ? 'Date inconnue' : formatVeilleDate(new Date(d));
     if (!groups[label]) groups[label] = [];
     groups[label].push(a);
   });
+
+  const ctxMenu = document.getElementById('veille-context-menu');
 
   let html = '';
   for (const [dateLabel, articles] of Object.entries(groups)) {
@@ -3342,14 +3424,20 @@ function renderVeilleFeed() {
     for (const a of articles) {
       const cat = veilleCategories.find(c => c.id === a.categoryId);
       const timeAgo = a.pubDate ? relativeTime(new Date(a.pubDate)) : '';
+      const highlight = veilleSearchQuery
+        ? `<span class="veille-search-hl">${veilleSearchQuery}</span>`
+        : null;
+      const titleHtml = veilleSearchQuery
+        ? highlightText(a.title, veilleSearchQuery)
+        : a.title;
       html += `<div class="veille-card ${a.read ? 'read' : ''}" data-id="${a.id}">
         <div class="veille-card-meta">
           ${cat ? `<span class="veille-card-cat" style="background:${cat.color}20;color:${cat.color};border-color:${cat.color}40">${cat.name}</span>` : ''}
           <span class="veille-card-source">${a.feedName}</span>
           <span class="veille-card-time">${timeAgo}</span>
         </div>
-        <div class="veille-card-title">${a.title}</div>
-        ${a.description ? `<div class="veille-card-desc">${a.description}</div>` : ''}
+        <div class="veille-card-title">${titleHtml}</div>
+        ${a.description ? `<div class="veille-card-desc">${veilleSearchQuery ? highlightText(a.description, veilleSearchQuery) : a.description}</div>` : ''}
         <div class="veille-card-actions">
           <button class="veille-btn-link" data-link="${a.link}" data-id="${a.id}">Lire l'article →</button>
           ${!a.read ? `<button class="veille-btn-read" data-id="${a.id}">Marquer lu</button>` : ''}
@@ -3358,16 +3446,54 @@ function renderVeilleFeed() {
     }
   }
 
+  // Pagination controls
+  if (usePagination && totalPages > 1) {
+    html += `<div class="veille-pagination">
+      <button class="veille-page-btn" id="veille-page-prev" ${currentPage === 0 ? 'disabled' : ''}>← Précédent</button>
+      <span class="veille-page-info">Page ${currentPage + 1} / ${totalPages} (${filtered.length} articles)</span>
+      <button class="veille-page-btn" id="veille-page-next" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Suivant →</button>
+    </div>`;
+  }
+
   container.innerHTML = html;
 
-  // Wire actions
+  // Pagination buttons
+  container.querySelector('#veille-page-prev')?.addEventListener('click', () => {
+    veillePage = Math.max(0, currentPage - 1);
+    renderVeilleFeed();
+    container.scrollTop = 0;
+  });
+  container.querySelector('#veille-page-next')?.addEventListener('click', () => {
+    veillePage = Math.min(totalPages - 1, currentPage + 1);
+    renderVeilleFeed();
+    container.scrollTop = 0;
+  });
+
+  // Context menu (right-click)
+  container.querySelectorAll('.veille-card').forEach(card => {
+    card.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      veilleCtxArticleId = card.dataset.id;
+      const art = veilleArticles.find(a => a.id === veilleCtxArticleId);
+      // Show/hide "Marquer non-lu" depending on read state
+      const unreadBtn = document.getElementById('veille-ctx-unread');
+      if (unreadBtn) unreadBtn.style.display = art?.read ? '' : 'none';
+      if (ctxMenu) {
+        ctxMenu.style.display = 'block';
+        ctxMenu.style.left = `${e.clientX}px`;
+        ctxMenu.style.top = `${e.clientY}px`;
+      }
+    });
+  });
+
+  // Read link + mark read
   container.querySelectorAll('.veille-btn-link').forEach(btn => {
     btn.addEventListener('click', async () => {
       window.api.openUrl(btn.dataset.link);
       const id = btn.dataset.id;
       await window.api.veilleMarkRead([id]);
       const art = veilleArticles.find(a => a.id === id);
-      if (art) art.read = true;
+      if (art) { art.read = true; art.readAt = new Date().toISOString(); }
       const card = container.querySelector(`.veille-card[data-id="${id}"]`);
       if (card) card.classList.add('read');
       renderVeilleBadge();
@@ -3380,7 +3506,7 @@ function renderVeilleFeed() {
       const id = btn.dataset.id;
       await window.api.veilleMarkRead([id]);
       const art = veilleArticles.find(a => a.id === id);
-      if (art) art.read = true;
+      if (art) { art.read = true; art.readAt = new Date().toISOString(); }
       const card = container.querySelector(`.veille-card[data-id="${id}"]`);
       if (card) { card.classList.add('read'); btn.remove(); }
       renderVeilleBadge();
@@ -3407,6 +3533,63 @@ function relativeTime(d) {
   return `il y a ${Math.round(diff / 1440)}j`;
 }
 
+function highlightText(text, query) {
+  if (!text || !query) return text || '';
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="veille-hl">$1</mark>');
+}
+
+async function transferToNote(articleId) {
+  const art = veilleArticles.find(a => a.id === articleId);
+  if (!art) return;
+  const snippet = (art.description || '').replace(/<[^>]*>/g, '').slice(0, 300);
+  const pubDate = art.pubDate ? new Date(art.pubDate).toLocaleDateString('fr-FR') : '';
+  const content = `<p><strong>${art.title}</strong></p>` +
+    (snippet ? `<p>${snippet}…</p>` : '') +
+    `<p><a href="${art.link}">${art.link}</a></p>` +
+    (pubDate ? `<p><em>Publié le ${pubDate} — via ${art.feedName}</em></p>` : '');
+  const note = {
+    id: `note-${Date.now()}`,
+    title: art.title.slice(0, 80),
+    content,
+    color: '#fef08a',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await window.api.veilleTransferToNote(note);
+  // Reload notes if on notes page
+  if (typeof notes !== 'undefined') {
+    notes = await window.api.getNotes();
+    if (typeof renderNotes === 'function') renderNotes();
+    if (typeof renderHome === 'function') renderHome();
+  }
+  // Brief toast
+  showVeilleToast('📝 Article transféré dans les Notes');
+}
+
+async function markArticleUnread(articleId) {
+  await window.api.veilleMarkUnread([articleId]);
+  const art = veilleArticles.find(a => a.id === articleId);
+  if (art) { art.read = false; delete art.readAt; }
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+  renderVeilleBadge();
+}
+
+function showVeilleToast(msg) {
+  let toast = document.getElementById('veille-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'veille-toast';
+    toast.className = 'veille-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
 // ── Refresh ────────────────────────────────────────────────────────────────
 
 async function veilleRefreshAll() {
@@ -3429,6 +3612,7 @@ async function veilleRefreshAll() {
 async function openVeilleManage() {
   renderVeilleManageFeeds();
   renderVeilleManageCats();
+  await loadVeilleArchiveSettingsUI();
   switchVeilleManageTab('feeds');
   openModal('modal-veille-manage');
 }
@@ -3436,6 +3620,52 @@ async function openVeilleManage() {
 function switchVeilleManageTab(tab) {
   document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('active', b.dataset.vtab === tab));
   document.querySelectorAll('.veille-manage-pane').forEach(p => p.classList.toggle('active', p.id === `vtab-${tab}`));
+}
+
+async function loadVeilleArchiveSettingsUI() {
+  const settings = await window.api.veilleGetArchiveSettings();
+  const daysInput = document.getElementById('veille-archive-days');
+  const timeInput = document.getElementById('veille-archive-time');
+  const unreadInput = document.getElementById('veille-max-unread-days');
+  if (daysInput) { daysInput.value = settings.archiveDays ?? 30; updateArchiveDaysLabel(daysInput.value); }
+  if (timeInput) timeInput.value = settings.archiveTime || '02:00';
+  if (unreadInput) { unreadInput.value = settings.maxUnreadDays ?? 0; updateUnreadDaysLabel(unreadInput.value); }
+
+  daysInput?.addEventListener('input', () => updateArchiveDaysLabel(daysInput.value));
+  unreadInput?.addEventListener('input', () => updateUnreadDaysLabel(unreadInput.value));
+
+  document.getElementById('btn-veille-archive-save')?.addEventListener('click', saveVeilleArchiveSettings);
+  document.getElementById('btn-veille-archive-cleanup')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('veille-archive-status');
+    if (statusEl) statusEl.textContent = 'Nettoyage en cours…';
+    await window.api.veilleRunArchiveCleanup();
+    await loadVeilleData();
+    renderVeilleCatsBar();
+    renderVeilleFeed();
+    renderVeilleBadge();
+    if (statusEl) { statusEl.textContent = '✅ Nettoyage effectué.'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+  });
+}
+
+function updateArchiveDaysLabel(val) {
+  const el = document.getElementById('veille-archive-days-label');
+  if (!el) return;
+  el.textContent = val == 0 ? 'Désactivé' : `${val} jour${val > 1 ? 's' : ''}`;
+}
+
+function updateUnreadDaysLabel(val) {
+  const el = document.getElementById('veille-max-unread-label');
+  if (!el) return;
+  el.textContent = val == 0 ? 'Désactivé' : `${val} jour${val > 1 ? 's' : ''}`;
+}
+
+async function saveVeilleArchiveSettings() {
+  const days = parseInt(document.getElementById('veille-archive-days')?.value ?? 30);
+  const time = document.getElementById('veille-archive-time')?.value || '02:00';
+  const unread = parseInt(document.getElementById('veille-max-unread-days')?.value ?? 0);
+  await window.api.veilleSaveArchiveSettings({ archiveDays: days, archiveTime: time, maxUnreadDays: unread });
+  const statusEl = document.getElementById('veille-archive-status');
+  if (statusEl) { statusEl.textContent = '✅ Paramètres enregistrés.'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
 }
 
 function renderVeilleManageCats() {

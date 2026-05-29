@@ -58,5 +58,10 @@ contextBridge.exposeInMainWorld('api', {
   veilleRefreshAll: () => ipcRenderer.invoke('veille-refresh-all'),
   veilleTestFeed: (url) => ipcRenderer.invoke('veille-test-feed', url),
   onVeilleRefreshed: (cb) => ipcRenderer.on('veille-refreshed', cb),
+  veilleMarkUnread: (ids) => ipcRenderer.invoke('veille-mark-unread', ids),
+  veilleTransferToNote: (data) => ipcRenderer.invoke('veille-transfer-to-note', data),
+  veilleGetArchiveSettings: () => ipcRenderer.invoke('veille-get-archive-settings'),
+  veilleSaveArchiveSettings: (s) => ipcRenderer.invoke('veille-save-archive-settings', s),
+  veilleRunArchiveCleanup: () => ipcRenderer.invoke('veille-run-archive-cleanup'),
 });
 
