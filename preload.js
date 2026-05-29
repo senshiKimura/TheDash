@@ -45,5 +45,18 @@ contextBridge.exposeInMainWorld('api', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   applyUpdate: () => ipcRenderer.invoke('apply-update'),
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_, msg) => cb(msg)),
+  veilleGetCategories: () => ipcRenderer.invoke('veille-get-categories'),
+  veilleGetFeeds: () => ipcRenderer.invoke('veille-get-feeds'),
+  veilleGetArticles: (opts) => ipcRenderer.invoke('veille-get-articles', opts),
+  veilleGetLastRefresh: () => ipcRenderer.invoke('veille-get-last-refresh'),
+  veilleSaveCategory: (cat) => ipcRenderer.invoke('veille-save-category', cat),
+  veilleDeleteCategory: (id) => ipcRenderer.invoke('veille-delete-category', id),
+  veilleSaveFeed: (feed) => ipcRenderer.invoke('veille-save-feed', feed),
+  veilleDeleteFeed: (id) => ipcRenderer.invoke('veille-delete-feed', id),
+  veilleMarkRead: (ids) => ipcRenderer.invoke('veille-mark-read', ids),
+  veilleMarkAllRead: (opts) => ipcRenderer.invoke('veille-mark-all-read', opts),
+  veilleRefreshAll: () => ipcRenderer.invoke('veille-refresh-all'),
+  veilleTestFeed: (url) => ipcRenderer.invoke('veille-test-feed', url),
+  onVeilleRefreshed: (cb) => ipcRenderer.on('veille-refreshed', cb),
 });
 

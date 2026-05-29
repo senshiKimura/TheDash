@@ -898,3 +898,74 @@ body.hacker .whiteboard-canvas{background:#010810}
 .schema-card.expanded{width:220px;z-index:5}
 .schema-card-hint{font-size:10px;color:var(--text3);margin-top:4px;font-style:italic}
 
+
+/* ══ VEILLE TECHNOLOGIQUE ══════════════════════════════════════════════════ */
+
+/* Sidebar badge */
+.nav-btn{position:relative}
+.veille-badge{position:absolute;top:4px;right:6px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;border-radius:999px;padding:1px 5px;min-width:16px;text-align:center;line-height:16px}
+
+/* Page layout */
+#page-veille.active{display:flex;flex-direction:column;gap:0;padding:0;height:100%}
+
+/* Topbar */
+.veille-topbar{display:flex;align-items:center;gap:10px;padding:16px 24px 10px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.veille-cats-bar{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;flex:1;scrollbar-width:none}
+.veille-cats-bar::-webkit-scrollbar{display:none}
+.veille-header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.veille-refresh-label{font-size:11px;color:var(--text3);white-space:nowrap}
+
+/* Category pills */
+.veille-cat-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s;font-family:inherit}
+.veille-cat-pill:hover{border-color:var(--accent);color:var(--accent)}
+.veille-cat-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.veille-cat-pill.active .veille-pill-count{background:rgba(255,255,255,.25);color:#fff}
+.veille-pill-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.veille-pill-count{background:var(--bg3);color:var(--text3);font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;min-width:18px;text-align:center}
+
+/* Round icon button */
+.btn-icon-round{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0}
+.btn-icon-round:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Feed wrap */
+.veille-feed-wrap{flex:1;overflow-y:auto;padding:16px 24px 24px}
+.veille-feed{display:flex;flex-direction:column;gap:8px;max-width:860px;margin:0 auto}
+
+/* Date group */
+.veille-date-group{margin:16px 0 8px;padding:0}
+.veille-date-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+
+/* Article card */
+.veille-card{background:var(--card-bg);border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;transition:all .15s;cursor:default}
+.veille-card:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(0,0,0,.07)}
+.veille-card.read{opacity:.55}
+.veille-card.read .veille-card-title{font-weight:500}
+.veille-card-meta{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap}
+.veille-card-cat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid;text-transform:uppercase;letter-spacing:.05em}
+.veille-card-source{font-size:11px;color:var(--text3);font-weight:500}
+.veille-card-time{font-size:11px;color:var(--text3);margin-left:auto}
+.veille-card-title{font-size:14px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:5px}
+.veille-card-desc{font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.veille-card-actions{display:flex;align-items:center;gap:10px}
+.veille-btn-link{background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:0;font-family:inherit;transition:opacity .15s}
+.veille-btn-link:hover{opacity:.75;text-decoration:underline}
+.veille-btn-read{background:none;border:1px solid var(--border);color:var(--text3);font-size:11px;font-weight:500;cursor:pointer;padding:3px 10px;border-radius:6px;font-family:inherit;transition:all .15s}
+.veille-btn-read:hover{border-color:var(--text2);color:var(--text2)}
+
+/* Empty state */
+.veille-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;color:var(--text3)}
+.veille-empty h3{font-size:16px;font-weight:700;color:var(--text2);margin:0 0 8px}
+.veille-empty p{font-size:13px;margin:0 0 16px;line-height:1.5}
+
+/* Manage modal panes */
+.veille-manage-pane{display:none}
+.veille-manage-pane.active{display:block}
+
+/* Manage rows */
+.veille-manage-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg);margin-bottom:8px}
+.veille-manage-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.veille-manage-name{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.veille-manage-sub{font-size:11px;color:var(--text3);white-space:nowrap}
+.veille-manage-btns{display:flex;gap:4px;flex-shrink:0}
+.icon-btn.danger{color:var(--danger,#ef4444)}
+.icon-btn.danger:hover{background:rgba(239,68,68,.1)}

@@ -41,6 +41,11 @@
           <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
           <span>Ressources</span>
         </button>
+        <button class="nav-btn" data-page="veille">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+          <span>Veille</span>
+          <span id="veille-unread-badge" class="veille-badge" style="display:none"></span>
+        </button>
         <button class="nav-btn" data-page="notes">
           <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           <span>Notes</span>
@@ -382,6 +387,27 @@
           <button class="btn-primary" id="btn-new-note">+ Nouvelle note</button>
         </div>
         <div class="notes-grid" id="notes-grid"></div>
+      </section>
+
+      <!-- ═══ VEILLE ═══ -->
+      <section id="page-veille" class="page">
+        <!-- Topbar -->
+        <div class="veille-topbar">
+          <div class="veille-cats-bar" id="veille-cats-bar">
+            <!-- Pills rendered by JS -->
+          </div>
+          <div class="veille-header-actions">
+            <span id="veille-refresh-label" class="veille-refresh-label"></span>
+            <button class="btn-icon-round" id="btn-veille-refresh" title="Actualiser tous les flux">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            </button>
+            <button class="btn-primary" id="btn-veille-manage" style="font-size:13px;padding:6px 14px">⚙ Sources</button>
+          </div>
+        </div>
+        <!-- Feed -->
+        <div class="veille-feed-wrap">
+          <div class="veille-feed" id="veille-feed"></div>
+        </div>
       </section>
 
       <!-- ═══ CALENDRIER ═══ -->
@@ -1049,6 +1075,101 @@
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="btn-cancel-import">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ VEILLE : Gérer les sources ══ -->
+  <div class="modal-overlay" id="modal-veille-manage">
+    <div class="modal" style="width:660px;max-height:80vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2>Gérer les sources de veille</h2>
+        <button class="modal-close" id="modal-veille-manage-close">✕</button>
+      </div>
+      <div class="modal-body" style="flex:1;overflow-y:auto;padding-top:0">
+        <div class="settings-tabbar" style="margin-bottom:16px">
+          <button class="settings-tab active" data-vtab="feeds">Sources RSS</button>
+          <button class="settings-tab" data-vtab="cats">Catégories</button>
+        </div>
+
+        <!-- Pane: Sources -->
+        <div class="veille-manage-pane active" id="vtab-feeds">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <p style="font-size:12px;color:var(--text3);margin:0">Ajoutez des flux RSS ou Atom pour récupérer automatiquement les articles.</p>
+            <button class="btn-primary" id="btn-veille-add-feed" style="white-space:nowrap;flex-shrink:0">+ Ajouter une source</button>
+          </div>
+          <div id="veille-feeds-list"></div>
+        </div>
+
+        <!-- Pane: Catégories -->
+        <div class="veille-manage-pane" id="vtab-cats">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <p style="font-size:12px;color:var(--text3);margin:0">Organisez vos sources par thème.</p>
+            <button class="btn-primary" id="btn-veille-add-cat" style="white-space:nowrap;flex-shrink:0">+ Nouvelle catégorie</button>
+          </div>
+          <div id="veille-cats-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ VEILLE : Ajouter / éditer une catégorie ══ -->
+  <div class="modal-overlay" id="modal-veille-cat">
+    <div class="modal" style="width:400px">
+      <div class="modal-header">
+        <h2 id="modal-veille-cat-title">Nouvelle catégorie</h2>
+        <button class="modal-close" id="modal-veille-cat-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>Nom *</label>
+        <input type="text" id="veille-cat-name" placeholder="Ex: Cybersécurité, Système, Réseau..."/>
+        <label style="margin-top:12px">Couleur</label>
+        <div class="color-picker" id="veille-cat-color-picker">
+          <div class="color-opt selected" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="color-opt" data-color="#7c3aed" style="background:#7c3aed"></div>
+          <div class="color-opt" data-color="#db2777" style="background:#db2777"></div>
+          <div class="color-opt" data-color="#f59e0b" style="background:#f59e0b"></div>
+          <div class="color-opt" data-color="#10b981" style="background:#10b981"></div>
+          <div class="color-opt" data-color="#ef4444" style="background:#ef4444"></div>
+          <div class="color-opt" data-color="#06b6d4" style="background:#06b6d4"></div>
+          <div class="color-opt" data-color="#64748b" style="background:#64748b"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-veille-cat-cancel">Annuler</button>
+        <button class="btn-primary" id="btn-veille-cat-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ VEILLE : Ajouter / éditer une source ══ -->
+  <div class="modal-overlay" id="modal-veille-feed">
+    <div class="modal" style="width:480px">
+      <div class="modal-header">
+        <h2 id="modal-veille-feed-title">Ajouter une source RSS</h2>
+        <button class="modal-close" id="modal-veille-feed-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>Nom affiché *</label>
+        <input type="text" id="veille-feed-name" placeholder="Ex: Developpez.com — Sécurité"/>
+        <label style="margin-top:12px">URL du flux RSS / Atom *</label>
+        <div style="display:flex;gap:8px">
+          <input type="url" id="veille-feed-url" placeholder="https://www.developpez.com/index/rss" style="flex:1"/>
+          <button class="btn-secondary" id="btn-veille-test-feed" style="white-space:nowrap;flex-shrink:0">Tester</button>
+        </div>
+        <div id="veille-feed-test-result" style="font-size:12px;margin-top:6px;min-height:16px;line-height:1.5"></div>
+        <label style="margin-top:12px">Catégorie</label>
+        <select id="veille-feed-cat" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);font-size:13px">
+          <option value="">— Aucune catégorie —</option>
+        </select>
+        <p style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.6">
+          Exemples RSS&nbsp;: <code>developpez.com/index/rss</code>, <code>feeds.feedburner.com/…</code>,<br>
+          <code>korben.info/feed</code>, <code>www.cert.ssi.gouv.fr/feed/</code>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-veille-feed-cancel">Annuler</button>
+        <button class="btn-primary" id="btn-veille-feed-save">Enregistrer</button>
       </div>
     </div>
   </div>

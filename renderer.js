@@ -156,6 +156,7 @@ async function init() {
   renderResCats();
   renderResources();
   renderNotes();
+  initVeille();
 
   // Start auto-sync if server is configured
   startAutoSync();
@@ -3164,6 +3165,473 @@ function startAutoSync() {
   // Pull immediately on start then every 30s
   pullFromServer();
   setInterval(pullFromServer, 30000);
+}
+
+// ══ VEILLE TECHNOLOGIQUE ══════════════════════════════════════════════════════
+
+let veilleCategories = [];
+let veilleFeeds = [];
+let veilleArticles = [];
+let veilleActiveCat = 'all'; // 'all' | categoryId
+let editingVeilleCatId = null;
+let editingVeilleFeedId = null;
+let selectedVeilleCatColor = '#2563eb';
+
+async function initVeille() {
+  // Wire up manage modal tabs
+  document.querySelectorAll('[data-vtab]').forEach(btn => {
+    btn.addEventListener('click', () => switchVeilleManageTab(btn.dataset.vtab));
+  });
+  on('modal-veille-manage-close', 'click', () => closeModal('modal-veille-manage'));
+  on('modal-veille-cat-close', 'click', () => closeModal('modal-veille-cat'));
+  on('modal-veille-cat-cancel', 'click', () => closeModal('modal-veille-cat'));
+  on('modal-veille-feed-close', 'click', () => closeModal('modal-veille-feed'));
+  on('modal-veille-feed-cancel', 'click', () => closeModal('modal-veille-feed'));
+
+  on('btn-veille-manage', 'click', openVeilleManage);
+  on('btn-veille-refresh', 'click', veilleRefreshAll);
+  on('btn-veille-add-cat', 'click', () => openVeilleCatModal());
+  on('btn-veille-add-feed', 'click', () => openVeilleFeedModal());
+  on('btn-veille-cat-save', 'click', saveVeilleCategory);
+  on('btn-veille-feed-save', 'click', saveVeilleFeed);
+  on('btn-veille-test-feed', 'click', testVeilleFeed);
+
+  // Color picker in category modal
+  document.querySelectorAll('#veille-cat-color-picker .color-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('#veille-cat-color-picker .color-opt').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      selectedVeilleCatColor = opt.dataset.color;
+    });
+  });
+
+  // Listen for background refresh events
+  if (window.api.onVeilleRefreshed) {
+    window.api.onVeilleRefreshed(async () => {
+      await loadVeilleData();
+      renderVeilleFeed();
+      renderVeilleBadge();
+    });
+  }
+
+  await loadVeilleData();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+  renderVeilleBadge();
+}
+
+async function loadVeilleData() {
+  [veilleCategories, veilleFeeds, veilleArticles] = await Promise.all([
+    window.api.veilleGetCategories(),
+    window.api.veilleGetFeeds(),
+    window.api.veilleGetArticles({}),
+  ]);
+}
+
+// ── Categories bar ─────────────────────────────────────────────────────────
+
+function renderVeilleCatsBar() {
+  const bar = q('veille-cats-bar');
+  if (!bar) return;
+
+  // Count unread per category
+  const unreadAll = veilleArticles.filter(a => !a.read).length;
+  const unreadByCat = {};
+  veilleArticles.filter(a => !a.read).forEach(a => {
+    if (a.categoryId) unreadByCat[a.categoryId] = (unreadByCat[a.categoryId] || 0) + 1;
+  });
+
+  let html = `<button class="veille-cat-pill ${veilleActiveCat === 'all' ? 'active' : ''}" data-catid="all">
+    Tout <span class="veille-pill-count">${unreadAll || veilleArticles.length}</span>
+  </button>`;
+
+  for (const cat of veilleCategories) {
+    const count = unreadByCat[cat.id] || 0;
+    const total = veilleArticles.filter(a => a.categoryId === cat.id).length;
+    html += `<button class="veille-cat-pill ${veilleActiveCat === cat.id ? 'active' : ''}" data-catid="${cat.id}" style="--cat-color:${cat.color}">
+      <span class="veille-pill-dot" style="background:${cat.color}"></span>
+      ${cat.name}
+      <span class="veille-pill-count">${count || total}</span>
+    </button>`;
+  }
+
+  // No-category pill if uncategorized articles exist
+  const uncatCount = veilleArticles.filter(a => !a.categoryId).length;
+  if (uncatCount) {
+    html += `<button class="veille-cat-pill ${veilleActiveCat === 'none' ? 'active' : ''}" data-catid="none">
+      Sans catégorie <span class="veille-pill-count">${uncatCount}</span>
+    </button>`;
+  }
+
+  bar.innerHTML = html;
+  bar.querySelectorAll('.veille-cat-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      veilleActiveCat = btn.dataset.catid;
+      renderVeilleCatsBar();
+      renderVeilleFeed();
+    });
+  });
+
+  // Refresh label
+  updateVeilleRefreshLabel();
+}
+
+async function updateVeilleRefreshLabel() {
+  const label = q('veille-refresh-label');
+  if (!label) return;
+  const ts = await window.api.veilleGetLastRefresh();
+  if (!ts) { label.textContent = ''; return; }
+  const diff = Math.round((Date.now() - ts) / 60000);
+  if (diff < 1) label.textContent = 'actualisé à l\'instant';
+  else if (diff < 60) label.textContent = `actualisé il y a ${diff} min`;
+  else label.textContent = `actualisé il y a ${Math.round(diff / 60)}h`;
+}
+
+function renderVeilleBadge() {
+  const badge = q('veille-unread-badge');
+  if (!badge) return;
+  const count = veilleArticles.filter(a => !a.read).length;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ── Article feed ───────────────────────────────────────────────────────────
+
+function renderVeilleFeed() {
+  const container = q('veille-feed');
+  if (!container) return;
+
+  let filtered = veilleArticles;
+  if (veilleActiveCat === 'none') filtered = filtered.filter(a => !a.categoryId);
+  else if (veilleActiveCat !== 'all') filtered = filtered.filter(a => a.categoryId === veilleActiveCat);
+
+  if (!filtered.length) {
+    if (!veilleFeeds.length) {
+      container.innerHTML = `<div class="veille-empty">
+        <div style="font-size:48px;margin-bottom:12px">📡</div>
+        <h3>Aucune source configurée</h3>
+        <p>Ajoutez des flux RSS pour commencer votre veille technologique.</p>
+        <button class="btn-primary" onclick="openVeilleManage()">+ Ajouter une source</button>
+      </div>`;
+    } else {
+      container.innerHTML = `<div class="veille-empty">
+        <div style="font-size:48px;margin-bottom:12px">🔄</div>
+        <h3>Aucun article</h3>
+        <p>Cliquez sur Actualiser pour récupérer les derniers articles.</p>
+      </div>`;
+    }
+    return;
+  }
+
+  // Group by date
+  const groups = {};
+  filtered.forEach(a => {
+    const d = a.pubDate ? new Date(a.pubDate) : new Date(a.fetchedAt);
+    const label = isNaN(d) ? 'Date inconnue' : formatVeilleDate(d);
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(a);
+  });
+
+  let html = '';
+  for (const [dateLabel, articles] of Object.entries(groups)) {
+    html += `<div class="veille-date-group"><span class="veille-date-label">${dateLabel}</span></div>`;
+    for (const a of articles) {
+      const cat = veilleCategories.find(c => c.id === a.categoryId);
+      const timeAgo = a.pubDate ? relativeTime(new Date(a.pubDate)) : '';
+      html += `<div class="veille-card ${a.read ? 'read' : ''}" data-id="${a.id}">
+        <div class="veille-card-meta">
+          ${cat ? `<span class="veille-card-cat" style="background:${cat.color}20;color:${cat.color};border-color:${cat.color}40">${cat.name}</span>` : ''}
+          <span class="veille-card-source">${a.feedName}</span>
+          <span class="veille-card-time">${timeAgo}</span>
+        </div>
+        <div class="veille-card-title">${a.title}</div>
+        ${a.description ? `<div class="veille-card-desc">${a.description}</div>` : ''}
+        <div class="veille-card-actions">
+          <button class="veille-btn-link" data-link="${a.link}" data-id="${a.id}">Lire l'article →</button>
+          ${!a.read ? `<button class="veille-btn-read" data-id="${a.id}">Marquer lu</button>` : ''}
+        </div>
+      </div>`;
+    }
+  }
+
+  container.innerHTML = html;
+
+  // Wire actions
+  container.querySelectorAll('.veille-btn-link').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      window.api.openUrl(btn.dataset.link);
+      const id = btn.dataset.id;
+      await window.api.veilleMarkRead([id]);
+      const art = veilleArticles.find(a => a.id === id);
+      if (art) art.read = true;
+      const card = container.querySelector(`.veille-card[data-id="${id}"]`);
+      if (card) card.classList.add('read');
+      renderVeilleBadge();
+      renderVeilleCatsBar();
+    });
+  });
+
+  container.querySelectorAll('.veille-btn-read').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      await window.api.veilleMarkRead([id]);
+      const art = veilleArticles.find(a => a.id === id);
+      if (art) art.read = true;
+      const card = container.querySelector(`.veille-card[data-id="${id}"]`);
+      if (card) { card.classList.add('read'); btn.remove(); }
+      renderVeilleBadge();
+      renderVeilleCatsBar();
+    });
+  });
+}
+
+function formatVeilleDate(d) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  d.setHours(0, 0, 0, 0);
+  if (d.getTime() === today.getTime()) return 'Aujourd\'hui';
+  if (d.getTime() === yesterday.getTime()) return 'Hier';
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function relativeTime(d) {
+  if (!d || isNaN(d)) return '';
+  const diff = Math.round((Date.now() - d.getTime()) / 60000);
+  if (diff < 1) return 'à l\'instant';
+  if (diff < 60) return `il y a ${diff} min`;
+  if (diff < 1440) return `il y a ${Math.round(diff / 60)}h`;
+  return `il y a ${Math.round(diff / 1440)}j`;
+}
+
+// ── Refresh ────────────────────────────────────────────────────────────────
+
+async function veilleRefreshAll() {
+  const btn = q('btn-veille-refresh');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  const label = q('veille-refresh-label');
+  if (label) label.textContent = 'actualisation…';
+
+  await window.api.veilleRefreshAll();
+  await loadVeilleData();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+  renderVeilleBadge();
+
+  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+}
+
+// ── Manage modal ───────────────────────────────────────────────────────────
+
+async function openVeilleManage() {
+  renderVeilleManageFeeds();
+  renderVeilleManageCats();
+  switchVeilleManageTab('feeds');
+  openModal('modal-veille-manage');
+}
+
+function switchVeilleManageTab(tab) {
+  document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('active', b.dataset.vtab === tab));
+  document.querySelectorAll('.veille-manage-pane').forEach(p => p.classList.toggle('active', p.id === `vtab-${tab}`));
+}
+
+function renderVeilleManageCats() {
+  const list = q('veille-cats-list');
+  if (!list) return;
+  if (!veilleCategories.length) {
+    list.innerHTML = `<p style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0">Aucune catégorie. Commencez par en créer une.</p>`;
+    return;
+  }
+  list.innerHTML = veilleCategories.map(cat => {
+    const feedCount = veilleFeeds.filter(f => f.categoryId === cat.id).length;
+    return `<div class="veille-manage-row">
+      <span class="veille-manage-dot" style="background:${cat.color}"></span>
+      <span class="veille-manage-name">${cat.name}</span>
+      <span class="veille-manage-sub">${feedCount} source${feedCount > 1 ? 's' : ''}</span>
+      <div class="veille-manage-btns">
+        <button class="icon-btn" data-edit-cat="${cat.id}" title="Modifier">✎</button>
+        <button class="icon-btn danger" data-del-cat="${cat.id}" title="Supprimer">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-edit-cat]').forEach(btn => openVeilleCatModal.bind(null, btn.dataset.editCat) && btn.addEventListener('click', () => openVeilleCatModal(btn.dataset.editCat)));
+  list.querySelectorAll('[data-del-cat]').forEach(btn => btn.addEventListener('click', () => deleteVeilleCategory(btn.dataset.delCat)));
+}
+
+function renderVeilleManageFeeds() {
+  const list = q('veille-feeds-list');
+  if (!list) return;
+  if (!veilleFeeds.length) {
+    list.innerHTML = `<p style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0">Aucune source. Ajoutez un flux RSS pour commencer.</p>`;
+    return;
+  }
+  list.innerHTML = veilleFeeds.map(feed => {
+    const cat = veilleCategories.find(c => c.id === feed.categoryId);
+    const artCount = veilleArticles.filter(a => a.feedId === feed.id).length;
+    return `<div class="veille-manage-row">
+      ${cat ? `<span class="veille-manage-dot" style="background:${cat.color}"></span>` : '<span class="veille-manage-dot" style="background:var(--text3)"></span>'}
+      <div style="flex:1;min-width:0">
+        <div class="veille-manage-name">${feed.name}</div>
+        <div class="veille-manage-sub" style="font-size:11px;word-break:break-all">${feed.url}</div>
+      </div>
+      <span class="veille-manage-sub">${artCount} art.</span>
+      <div class="veille-manage-btns">
+        <button class="icon-btn" data-edit-feed="${feed.id}" title="Modifier">✎</button>
+        <button class="icon-btn danger" data-del-feed="${feed.id}" title="Supprimer">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-edit-feed]').forEach(btn => btn.addEventListener('click', () => openVeilleFeedModal(btn.dataset.editFeed)));
+  list.querySelectorAll('[data-del-feed]').forEach(btn => btn.addEventListener('click', () => deleteVeilleFeed(btn.dataset.delFeed)));
+}
+
+// ── Category CRUD ──────────────────────────────────────────────────────────
+
+function openVeilleCatModal(editId = null) {
+  editingVeilleCatId = editId;
+  const el = q('modal-veille-cat-title');
+  if (el) el.textContent = editId ? 'Modifier la catégorie' : 'Nouvelle catégorie';
+
+  const nameInput = q('veille-cat-name');
+  if (nameInput) nameInput.value = '';
+  selectedVeilleCatColor = '#2563eb';
+
+  if (editId) {
+    const cat = veilleCategories.find(c => c.id === editId);
+    if (cat) {
+      if (nameInput) nameInput.value = cat.name;
+      selectedVeilleCatColor = cat.color;
+    }
+  }
+
+  document.querySelectorAll('#veille-cat-color-picker .color-opt').forEach(opt => {
+    opt.classList.toggle('selected', opt.dataset.color === selectedVeilleCatColor);
+  });
+
+  openModal('modal-veille-cat');
+}
+
+async function saveVeilleCategory() {
+  const name = q('veille-cat-name')?.value.trim();
+  if (!name) return;
+  const cat = {
+    id: editingVeilleCatId || `vcat-${Date.now()}`,
+    name,
+    color: selectedVeilleCatColor,
+  };
+  veilleCategories = await window.api.veilleSaveCategory(cat);
+  closeModal('modal-veille-cat');
+  renderVeilleManageCats();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+}
+
+async function deleteVeilleCategory(id) {
+  veilleCategories = await window.api.veilleDeleteCategory(id);
+  // Uncategorize feeds of this category
+  const affected = veilleFeeds.filter(f => f.categoryId === id);
+  for (const feed of affected) {
+    feed.categoryId = null;
+    await window.api.veilleSaveFeed(feed);
+  }
+  veilleFeeds = await window.api.veilleGetFeeds();
+  renderVeilleManageCats();
+  renderVeilleManageFeeds();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+}
+
+// ── Feed CRUD ──────────────────────────────────────────────────────────────
+
+function openVeilleFeedModal(editId = null) {
+  editingVeilleFeedId = editId;
+  const el = q('modal-veille-feed-title');
+  if (el) el.textContent = editId ? 'Modifier la source' : 'Ajouter une source RSS';
+
+  const nameInput = q('veille-feed-name');
+  const urlInput  = q('veille-feed-url');
+  const catSel    = q('veille-feed-cat');
+  const testResult = q('veille-feed-test-result');
+
+  if (nameInput) nameInput.value = '';
+  if (urlInput)  urlInput.value  = '';
+  if (testResult) testResult.textContent = '';
+
+  // Populate category select
+  if (catSel) {
+    catSel.innerHTML = '<option value="">— Aucune catégorie —</option>' +
+      veilleCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+
+  if (editId) {
+    const feed = veilleFeeds.find(f => f.id === editId);
+    if (feed) {
+      if (nameInput) nameInput.value = feed.name;
+      if (urlInput)  urlInput.value  = feed.url;
+      if (catSel)    catSel.value    = feed.categoryId || '';
+    }
+  }
+
+  openModal('modal-veille-feed');
+}
+
+async function testVeilleFeed() {
+  const url = q('veille-feed-url')?.value.trim();
+  const result = q('veille-feed-test-result');
+  const btn = q('btn-veille-test-feed');
+  if (!url || !result) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Test…'; }
+  result.textContent = '';
+  result.style.color = 'var(--text3)';
+
+  const res = await window.api.veilleTestFeed(url);
+  if (res.ok) {
+    result.style.color = '#10b981';
+    result.textContent = `✅ ${res.count} article(s) trouvé(s). Ex : "${res.sample}"`;
+  } else {
+    result.style.color = '#ef4444';
+    result.textContent = `❌ ${res.error}`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Tester'; }
+}
+
+async function saveVeilleFeed() {
+  const name = q('veille-feed-name')?.value.trim();
+  const url  = q('veille-feed-url')?.value.trim();
+  const catId = q('veille-feed-cat')?.value || null;
+  if (!name || !url) return;
+
+  const feed = {
+    id: editingVeilleFeedId || `vfeed-${Date.now()}`,
+    name,
+    url,
+    categoryId: catId || null,
+  };
+  veilleFeeds = await window.api.veilleSaveFeed(feed);
+  closeModal('modal-veille-feed');
+
+  // Auto-fetch the new feed immediately
+  await window.api.veilleRefreshAll();
+  await loadVeilleData();
+  renderVeilleManageFeeds();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+  renderVeilleBadge();
+}
+
+async function deleteVeilleFeed(id) {
+  veilleFeeds = await window.api.veilleDeleteFeed(id);
+  veilleArticles = veilleArticles.filter(a => a.feedId !== id);
+  renderVeilleManageFeeds();
+  renderVeilleCatsBar();
+  renderVeilleFeed();
+  renderVeilleBadge();
 }
 
 init();

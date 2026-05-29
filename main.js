@@ -83,6 +83,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   startReminderLoop();
+  startVeilleRefreshLoop();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' && app.isQuitting) app.quit(); });
 
@@ -526,4 +527,217 @@ ipcMain.handle('apply-update', async () => {
     return { ok: false, error: e.message };
   }
 });
+
+// ══ VEILLE TECHNOLOGIQUE (RSS/Atom) ══════════════════════════════════════════
+
+function extractXmlTag(xml, tag) {
+  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))</${tag}>`, 'i');
+  const m = xml.match(re);
+  if (!m) return '';
+  return (m[1] !== undefined ? m[1] : (m[2] || '')).trim();
+}
+
+function stripHtmlTags(str) {
+  return str.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function parseRSSXml(xml) {
+  const items = [];
+  const isAtom = /<feed\b/i.test(xml) && /Atom/i.test(xml.slice(0, 300));
+
+  if (isAtom) {
+    const re = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      const e = m[1];
+      const linkMatch = e.match(/<link[^>]+href=["']([^"']+)["']/i);
+      const link = linkMatch ? linkMatch[1] : extractXmlTag(e, 'link');
+      items.push({
+        title: extractXmlTag(e, 'title'),
+        link,
+        description: stripHtmlTags(extractXmlTag(e, 'summary') || extractXmlTag(e, 'content')).slice(0, 380),
+        pubDate: extractXmlTag(e, 'updated') || extractXmlTag(e, 'published'),
+        guid: extractXmlTag(e, 'id') || link,
+      });
+    }
+  } else {
+    const re = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      const e = m[1];
+      const link = extractXmlTag(e, 'link') || extractXmlTag(e, 'guid');
+      items.push({
+        title: extractXmlTag(e, 'title'),
+        link,
+        description: stripHtmlTags(extractXmlTag(e, 'description') || extractXmlTag(e, 'content:encoded')).slice(0, 380),
+        pubDate: extractXmlTag(e, 'pubDate') || extractXmlTag(e, 'dc:date'),
+        guid: extractXmlTag(e, 'guid') || link,
+      });
+    }
+  }
+
+  return items.filter(i => i.title && i.link);
+}
+
+function fetchRssUrl(url, maxRedirects = 4) {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.request({
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'TheDash-Veille/1.0 (RSS Reader)',
+          'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+        },
+        timeout: 12000,
+        rejectUnauthorized: false,
+      }, (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
+          const loc = res.headers.location;
+          const nextUrl = loc.startsWith('http') ? loc : new URL(loc, url).href;
+          resolve(fetchRssUrl(nextUrl, maxRedirects - 1));
+          return;
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({ ok: res.statusCode < 400, status: res.statusCode, body: Buffer.concat(chunks).toString('utf-8') }));
+      });
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout réseau')); });
+      req.on('error', reject);
+      req.end();
+    } catch (e) { reject(e); }
+  });
+}
+
+async function fetchAndCacheVeilleFeed(feed) {
+  const res = await fetchRssUrl(feed.url);
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+
+  const items = parseRSSXml(res.body);
+  if (!items.length) return { ok: false, error: 'Aucun article trouvé — vérifiez l\'URL RSS/Atom' };
+
+  const existing = load('veille-articles', []);
+  const existingGuids = new Set(existing.map(a => a.guid));
+
+  const newArticles = items
+    .filter(i => !existingGuids.has(i.guid))
+    .map(i => ({
+      id: `art-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      feedId: feed.id,
+      feedName: feed.name,
+      categoryId: feed.categoryId,
+      title: i.title,
+      link: i.link,
+      description: i.description,
+      pubDate: i.pubDate,
+      guid: i.guid,
+      read: false,
+      fetchedAt: new Date().toISOString(),
+    }));
+
+  const combined = [...newArticles, ...existing].slice(0, 1000);
+  save('veille-articles', combined);
+  return { ok: true, newCount: newArticles.length };
+}
+
+async function refreshAllVeilleFeeds() {
+  const feeds = load('veille-feeds', []);
+  const results = [];
+  for (const feed of feeds) {
+    try {
+      const r = await fetchAndCacheVeilleFeed(feed);
+      results.push({ feedId: feed.id, feedName: feed.name, ...r });
+    } catch (e) {
+      results.push({ feedId: feed.id, feedName: feed.name, ok: false, error: e.message });
+    }
+  }
+  save('veille-last-refresh', Date.now());
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('veille-refreshed');
+  return results;
+}
+
+function startVeilleRefreshLoop() {
+  const maybeFetch = async () => {
+    const last = load('veille-last-refresh', 0);
+    const feeds = load('veille-feeds', []);
+    if (feeds.length && Date.now() - last > 6 * 60 * 60 * 1000) {
+      await refreshAllVeilleFeeds().catch(() => {});
+    }
+  };
+  maybeFetch();
+  setInterval(maybeFetch, 60 * 60 * 1000);
+}
+
+// Veille IPC handlers
+ipcMain.handle('veille-get-categories', () => load('veille-categories', []));
+ipcMain.handle('veille-save-category', (_, cat) => {
+  const cats = load('veille-categories', []);
+  const idx = cats.findIndex(c => c.id === cat.id);
+  if (idx >= 0) cats[idx] = cat; else cats.push(cat);
+  save('veille-categories', cats); return cats;
+});
+ipcMain.handle('veille-delete-category', (_, id) => {
+  const cats = load('veille-categories', []).filter(c => c.id !== id);
+  save('veille-categories', cats); return cats;
+});
+
+ipcMain.handle('veille-get-feeds', () => load('veille-feeds', []));
+ipcMain.handle('veille-save-feed', (_, feed) => {
+  const feeds = load('veille-feeds', []);
+  const idx = feeds.findIndex(f => f.id === feed.id);
+  if (idx >= 0) feeds[idx] = feed; else feeds.push(feed);
+  save('veille-feeds', feeds); return feeds;
+});
+ipcMain.handle('veille-delete-feed', (_, id) => {
+  const feeds = load('veille-feeds', []).filter(f => f.id !== id);
+  const articles = load('veille-articles', []).filter(a => a.feedId !== id);
+  save('veille-feeds', feeds);
+  save('veille-articles', articles);
+  return feeds;
+});
+
+ipcMain.handle('veille-get-articles', (_, opts = {}) => {
+  let arts = load('veille-articles', []);
+  if (opts.categoryId) arts = arts.filter(a => a.categoryId === opts.categoryId);
+  if (opts.feedId) arts = arts.filter(a => a.feedId === opts.feedId);
+  if (opts.unreadOnly) arts = arts.filter(a => !a.read);
+  return arts;
+});
+
+ipcMain.handle('veille-mark-read', (_, ids) => {
+  const arts = load('veille-articles', []);
+  const set = new Set(Array.isArray(ids) ? ids : [ids]);
+  arts.forEach(a => { if (set.has(a.id)) a.read = true; });
+  save('veille-articles', arts); return true;
+});
+
+ipcMain.handle('veille-mark-all-read', (_, opts = {}) => {
+  const arts = load('veille-articles', []);
+  arts.forEach(a => {
+    if (!opts.categoryId && !opts.feedId) { a.read = true; return; }
+    if (opts.categoryId && a.categoryId === opts.categoryId) a.read = true;
+    if (opts.feedId && a.feedId === opts.feedId) a.read = true;
+  });
+  save('veille-articles', arts); return true;
+});
+
+ipcMain.handle('veille-refresh-all', async () => refreshAllVeilleFeeds());
+
+ipcMain.handle('veille-test-feed', async (_, url) => {
+  try {
+    const res = await fetchRssUrl(url);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} — URL inaccessible` };
+    const items = parseRSSXml(res.body);
+    if (!items.length) return { ok: false, error: 'Aucun article trouvé. Vérifiez que c\'est bien une URL RSS ou Atom.' };
+    return { ok: true, count: items.length, sample: items[0]?.title || '' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('veille-get-last-refresh', () => load('veille-last-refresh', 0));
 
