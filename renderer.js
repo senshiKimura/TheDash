@@ -3687,6 +3687,8 @@ function addVeilleSwipe(card, onSwipeRight, onSwipeLeft) {
 
   card.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
+    // Don't initiate swipe if clicking on a button or link inside the card
+    if (e.target.closest('button, a')) return;
     startX = e.clientX;
     dragging = true;
     card.setPointerCapture(e.pointerId);
