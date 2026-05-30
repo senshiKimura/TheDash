@@ -812,3 +812,54 @@ ipcMain.handle('veille-toggle-favorite', (_, id) => {
   return art ? art.favorite : false;
 });
 
+// ── iCal subscriptions ─────────────────────────────────────────────────────
+
+function parseICS(text) {
+  const events = [];
+  // RFC 5545: unfold continuation lines
+  const unfolded = text.replace(/\r\n[ \t]/g, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = unfolded.split('\n');
+  let cur = null;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (line === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (line === 'END:VEVENT') {
+      if (cur && cur.date && cur.label) events.push(cur);
+      cur = null; continue;
+    }
+    if (!cur) continue;
+    const ci = line.indexOf(':');
+    if (ci === -1) continue;
+    const keyPart = line.slice(0, ci).split(';')[0].toUpperCase();
+    const val = line.slice(ci + 1);
+    if (keyPart === 'DTSTART') {
+      const d = val.replace(/T.*/,'');
+      if (d.length >= 8) cur.date = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`;
+    } else if (keyPart === 'SUMMARY') {
+      cur.label = val.replace(/\\n/g,' ').replace(/\\,/g,',').replace(/\\\\/g,'\\');
+    } else if (keyPart === 'UID') {
+      cur.uid = val;
+    }
+  }
+  return events;
+}
+
+ipcMain.handle('cal-fetch-ics', async (_, { url, secret }) => {
+  try {
+    const fetchUrl = url.replace(/^webcal:\/\//i, 'https://');
+    const headers = {};
+    if (secret) {
+      headers['Authorization'] = 'Basic ' + Buffer.from(`:${secret}`).toString('base64');
+    }
+    const res = await fetch(fetchUrl, { headers, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    return { ok: true, events: parseICS(text) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('cal-get-subscriptions', () => load('cal-subscriptions', []));
+ipcMain.handle('cal-save-subscriptions', (_, subs) => { save('cal-subscriptions', subs); return true; });
+

@@ -24,6 +24,8 @@ let journalView = 'list'; // 'list' | 'schema'
 let appSettings = {};
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
+let calSubscriptions = [];
+let calIcsEvents = []; // { date, label, color, subId }
 
 // ── Tab system ──────────────────────────────────────────────────────────
 let openTabs = [{ id: 'main', type: 'main', label: 'Accueil' }];
@@ -176,6 +178,11 @@ async function init() {
   // Calendrier nav
   on('cal-prev', 'click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
   on('cal-next', 'click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
+  on('btn-cal-subs', 'click', openCalSubsModal);
+  on('modal-cal-subs-close', 'click', closeCalSubsModal);
+  on('modal-cal-subs-cancel', 'click', closeCalSubsModal);
+  document.getElementById('modal-cal-subs')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeCalSubsModal(); });
+  on('btn-cal-sub-add', 'click', addCalSubscription);
 
   // Onglet projet
   on('ctx-window-proj', 'click', () => {
@@ -695,7 +702,7 @@ function showPage(name) {
   const pageEl = document.getElementById(`page-${name}`);
   if (pageEl) pageEl.classList.add('active');
   if (name === 'home-v2') renderHomeV2();
-  if (name === 'calendar') renderCalendar();
+  if (name === 'calendar') { loadCalIcsEvents().then(renderCalendar); }
   if (name === 'weekly-review') renderWeeklyReview();
 }
 
@@ -739,7 +746,122 @@ function getCalendarEvents(year, month) {
       }
     }
   }
+  // iCal subscription events
+  for (const ev of calIcsEvents) {
+    const d = new Date(ev.date + 'T00:00:00');
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      events.push({ date: ev.date, type: 'ical', label: ev.label, color: ev.color });
+    }
+  }
   return events;
+}
+
+// ── iCal subscriptions UI ─────────────────────────────────────────────────
+
+function openCalSubsModal() {
+  renderCalSubsList();
+  document.getElementById('modal-cal-subs').classList.add('open');
+}
+
+function closeCalSubsModal() {
+  document.getElementById('modal-cal-subs').classList.remove('open');
+}
+
+function renderCalSubsList() {
+  const el = document.getElementById('cal-subs-list');
+  if (!el) return;
+  if (!calSubscriptions.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--text3);margin:0">Aucun abonnement — ajoutez votre premier calendrier ci-dessous.</p>';
+    return;
+  }
+  el.innerHTML = calSubscriptions.map(sub => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);margin-bottom:8px">
+      <span style="width:12px;height:12px;border-radius:50%;background:${sub.color};flex-shrink:0"></span>
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(sub.name)}</span>
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap" id="cal-sub-status-${sub.id}"></span>
+      <button class="btn-icon-round" data-del-sub="${sub.id}" title="Supprimer" style="width:26px;height:26px;font-size:14px;color:#ef4444;border-color:#ef444440">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-del-sub]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      calSubscriptions = calSubscriptions.filter(s => s.id !== btn.dataset.delSub);
+      await window.api.calSaveSubscriptions(calSubscriptions);
+      await loadCalIcsEvents();
+      renderCalendar();
+      renderCalSubsList();
+    });
+  });
+}
+
+async function addCalSubscription() {
+  const name = document.getElementById('cal-sub-name').value.trim();
+  const url  = document.getElementById('cal-sub-url').value.trim();
+  const secret = document.getElementById('cal-sub-secret').value;
+  const color = document.getElementById('cal-sub-color').value;
+  const errEl = document.getElementById('cal-sub-error');
+  const btn = document.getElementById('btn-cal-sub-add');
+
+  errEl.style.display = 'none';
+  if (!url) { errEl.textContent = 'L\'URL est obligatoire.'; errEl.style.display = ''; return; }
+  if (!name) { errEl.textContent = 'Le nom est obligatoire.'; errEl.style.display = ''; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Vérification…';
+
+  const res = await window.api.calFetchIcs({ url, secret });
+  btn.disabled = false;
+  btn.textContent = 'Ajouter';
+
+  if (!res.ok) {
+    errEl.textContent = `Impossible de charger le calendrier : ${res.error}`;
+    errEl.style.display = '';
+    return;
+  }
+
+  const sub = { id: Date.now().toString(), name, url, secret, color };
+  calSubscriptions.push(sub);
+  await window.api.calSaveSubscriptions(calSubscriptions);
+
+  // Append events to cache
+  for (const ev of res.events) {
+    calIcsEvents.push({ date: ev.date, label: ev.label, color, subId: sub.id });
+  }
+
+  // Reset form
+  document.getElementById('cal-sub-name').value = '';
+  document.getElementById('cal-sub-url').value = '';
+  document.getElementById('cal-sub-secret').value = '';
+  document.getElementById('cal-sub-color').value = '#2563eb';
+
+  // Update legend
+  const legendEl = document.getElementById('cal-ics-legend');
+  if (legendEl) {
+    legendEl.innerHTML = calSubscriptions.map(s =>
+      `<span class="cal-legend-item"><span class="cal-legend-dot" style="background:${s.color}"></span>${escHtml(s.name)}</span>`
+    ).join('');
+  }
+
+  renderCalSubsList();
+  renderCalendar();
+}
+
+async function loadCalIcsEvents() {
+  calSubscriptions = await window.api.calGetSubscriptions();
+  calIcsEvents = [];
+  await Promise.all(calSubscriptions.map(async sub => {
+    const res = await window.api.calFetchIcs({ url: sub.url, secret: sub.secret || '' });
+    if (res.ok) {
+      for (const ev of res.events) {
+        calIcsEvents.push({ date: ev.date, label: ev.label, color: sub.color || '#2563eb', subId: sub.id });
+      }
+    }
+  }));
+  // Update legend dots for subscriptions
+  const legendEl = document.getElementById('cal-ics-legend');
+  if (legendEl) {
+    legendEl.innerHTML = calSubscriptions.map(s =>
+      `<span class="cal-legend-item"><span class="cal-legend-dot" style="background:${s.color}"></span>${escHtml(s.name)}</span>`
+    ).join('');
+  }
 }
 
 function renderCalendar() {
