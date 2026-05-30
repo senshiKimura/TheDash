@@ -908,23 +908,30 @@ body.hacker .whiteboard-canvas{background:#010810}
 /* Page layout */
 #page-veille.active{display:flex;flex-direction:column;gap:0;padding:0;height:100%}
 
+/* ── Veille : 2-column body ──────────────────────────────────────────────── */
+.veille-body{display:flex;flex:1;overflow:hidden}
+.veille-sidebar{width:210px;min-width:210px;border-right:1px solid var(--border);padding:12px 8px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;gap:2px;background:var(--bg2)}
+.veille-sidebar-title{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:4px 10px 8px}
+
 /* Topbar */
-.veille-topbar{display:flex;align-items:center;gap:10px;padding:16px 24px 10px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
-.veille-cats-bar{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;flex:1;scrollbar-width:none}
-.veille-cats-bar::-webkit-scrollbar{display:none}
+.veille-topbar{display:flex;align-items:center;gap:10px;padding:12px 20px 10px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.veille-cats-bar{display:flex;flex-direction:column;gap:2px;width:100%}
 .veille-header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .veille-refresh-label{font-size:11px;color:var(--text3);white-space:nowrap}
 
-/* Category pills */
-.veille-cat-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s;font-family:inherit}
-.veille-cat-pill:hover{border-color:var(--accent);color:var(--accent)}
-.veille-cat-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.veille-cat-pill.active .veille-pill-count{background:rgba(255,255,255,.25);color:#fff}
-.veille-pill-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.veille-pill-count{background:var(--bg3);color:var(--text3);font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;min-width:18px;text-align:center}
+/* Category pills — sidebar style */
+.veille-cat-pill{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1.5px solid transparent;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .13s,color .13s;font-family:inherit;width:100%;text-align:left}
+.veille-cat-pill:hover{background:var(--bg3);color:var(--text)}
+.veille-cat-pill.active{background:rgba(37,99,235,.1);color:var(--accent)}
+.veille-cat-pill.active .veille-pill-count{background:rgba(37,99,235,.15);color:var(--accent)}
+.veille-cat-pill-fav.active{background:rgba(245,158,11,.1);color:#d97706}
+.veille-cat-pill-fav.active .veille-pill-count{background:rgba(245,158,11,.15);color:#d97706}
+.veille-pill-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.veille-pill-star{font-size:13px;flex-shrink:0;line-height:1}
+.veille-pill-count{background:var(--bg3);color:var(--text3);font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;min-width:18px;text-align:center;margin-left:auto}
 
 /* Round icon button */
-.btn-icon-round{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0}
+.btn-icon-round{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg2);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0}
 .btn-icon-round:hover{border-color:var(--accent);color:var(--accent)}
 
 /* Feed wrap */
@@ -951,6 +958,13 @@ body.hacker .whiteboard-canvas{background:#010810}
 .veille-btn-link:hover{opacity:.75;text-decoration:underline}
 .veille-btn-read{background:none;border:1px solid var(--border);color:var(--text3);font-size:11px;font-weight:500;cursor:pointer;padding:3px 10px;border-radius:6px;font-family:inherit;transition:all .15s}
 .veille-btn-read:hover{border-color:var(--text2);color:var(--text2)}
+
+/* Swipe gestures */
+.veille-card{touch-action:pan-y;user-select:none;transition:transform .22s ease,background .22s,border-color .22s}
+.veille-card.swipe-hint-right{background:rgba(245,158,11,.07)!important;border-color:#f59e0b!important}
+.veille-card.swipe-hint-left{background:rgba(16,185,129,.07)!important;border-color:#10b981!important}
+.veille-card.swipe-out-right{transform:translateX(110%)!important;opacity:0;transition:transform .28s ease,opacity .28s}
+.veille-card.swipe-out-left{transform:translateX(-110%)!important;opacity:0;transition:transform .28s ease,opacity .28s}
 
 /* Empty state */
 .veille-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;color:var(--text3)}

@@ -391,11 +391,8 @@
 
       <!-- ═══ VEILLE ═══ -->
       <section id="page-veille" class="page">
-        <!-- Topbar -->
+        <!-- Topbar: search + actions -->
         <div class="veille-topbar">
-          <div class="veille-cats-bar" id="veille-cats-bar">
-            <!-- Pills rendered by JS -->
-          </div>
           <div class="veille-search-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="veille-search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" id="veille-search" placeholder="Rechercher dans les articles…" class="veille-search-input"/>
@@ -408,9 +405,15 @@
             <button class="btn-primary" id="btn-veille-manage" style="font-size:13px;padding:6px 14px">⚙ Sources</button>
           </div>
         </div>
-        <!-- Feed -->
-        <div class="veille-feed-wrap">
-          <div class="veille-feed" id="veille-feed"></div>
+        <!-- Body: sidebar + feed -->
+        <div class="veille-body">
+          <div class="veille-sidebar">
+            <div class="veille-sidebar-title">Catégories</div>
+            <div class="veille-cats-bar" id="veille-cats-bar"></div>
+          </div>
+          <div class="veille-feed-wrap">
+            <div class="veille-feed" id="veille-feed"></div>
+          </div>
         </div>
       </section>
 

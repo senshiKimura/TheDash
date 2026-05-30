@@ -807,6 +807,7 @@ function renderHomeV2() {
       agendaEl.innerHTML = '<div class="v2-info-empty">Aucun article — configurez des flux RSS dans Veille</div>';
     } else {
       const recent = [...veilleArticles]
+        .filter(a => !a.read)
         .sort((a, b) => new Date(b.pubDate || b.fetchedAt || 0) - new Date(a.pubDate || a.fetchedAt || 0))
         .slice(0, 6);
       agendaEl.innerHTML = recent.map(art => {
@@ -3291,10 +3292,16 @@ function renderVeilleCatsBar() {
     </button>`;
   }
 
+  // Favorites pill
+  const favCount = veilleArticles.filter(a => a.favorite).length;
+  html += `<button class="veille-cat-pill veille-cat-pill-fav ${veilleActiveCat === 'favorites' ? 'active' : ''}" data-catid="favorites">
+    <span class="veille-pill-star">★</span> Mes favoris <span class="veille-pill-count">${favCount}</span>
+  </button>`;
+
   // Archives pill (read articles)
   const archiveCount = veilleArticles.filter(a => a.read).length;
   html += `<button class="veille-cat-pill veille-cat-pill-archive ${veilleActiveCat === 'archives' ? 'active' : ''}" data-catid="archives">
-    🗄 Archives <span class="veille-pill-count">${archiveCount}</span>
+    <span class="veille-pill-star" style="opacity:.6">🗄</span> Archives <span class="veille-pill-count">${archiveCount}</span>
   </button>`;
 
   bar.innerHTML = html;
@@ -3341,15 +3348,18 @@ function renderVeilleFeed() {
   if (!container) return;
 
   const isArchive = veilleActiveCat === 'archives';
+  const isFavorites = veilleActiveCat === 'favorites';
   const PAGE_SIZE = 10;
 
   // Base filter
   let filtered = veilleArticles;
   if (isArchive) {
     filtered = filtered.filter(a => a.read);
+  } else if (isFavorites) {
+    filtered = filtered.filter(a => a.favorite);
   } else {
-    // In normal view hide read articles unless searching
-    if (!veilleSearchQuery) filtered = filtered.filter(a => !a.read);
+    // In normal view: hide read AND favorited articles unless searching
+    if (!veilleSearchQuery) filtered = filtered.filter(a => !a.read && !a.favorite);
     if (veilleActiveCat === 'none') filtered = filtered.filter(a => !a.categoryId);
     else if (veilleActiveCat !== 'all') filtered = filtered.filter(a => a.categoryId === veilleActiveCat);
   }
@@ -3358,9 +3368,10 @@ function renderVeilleFeed() {
   if (veilleSearchQuery) {
     const q2 = veilleSearchQuery;
     filtered = veilleArticles.filter(a =>
-      (a.title || '').toLowerCase().includes(q2) ||
+      !a.favorite &&
+      ((a.title || '').toLowerCase().includes(q2) ||
       (a.description || '').toLowerCase().includes(q2) ||
-      (a.feedName || '').toLowerCase().includes(q2)
+      (a.feedName || '').toLowerCase().includes(q2))
     );
   }
 
@@ -3372,7 +3383,13 @@ function renderVeilleFeed() {
   });
 
   if (!filtered.length) {
-    if (isArchive) {
+    if (isFavorites) {
+      container.innerHTML = `<div class="veille-empty">
+        <div style="font-size:48px;margin-bottom:12px">⭐</div>
+        <h3>Aucun favori</h3>
+        <p>Cliquez sur l'étoile ☆ d'un article pour l'ajouter à vos favoris.</p>
+      </div>`;
+    } else if (isArchive) {
       container.innerHTML = `<div class="veille-empty">
         <div style="font-size:48px;margin-bottom:12px">🗄</div>
         <h3>Aucun article archivé</h3>
@@ -3401,8 +3418,8 @@ function renderVeilleFeed() {
     return;
   }
 
-  // Pagination for archives (and search results)
-  const usePagination = isArchive || veilleSearchQuery;
+  // Pagination for archives, favorites and search results
+  const usePagination = isArchive || isFavorites || veilleSearchQuery;
   const totalPages = usePagination ? Math.ceil(filtered.length / PAGE_SIZE) : 1;
   const currentPage = Math.min(veillePage, totalPages - 1);
   const pageItems = usePagination ? filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE) : filtered;
@@ -3430,7 +3447,7 @@ function renderVeilleFeed() {
       const titleHtml = veilleSearchQuery
         ? highlightText(a.title, veilleSearchQuery)
         : a.title;
-      html += `<div class="veille-card ${a.read ? 'read' : ''}" data-id="${a.id}">
+      html += `<div class="veille-card ${a.read ? 'read' : ''} ${a.favorite ? 'fav' : ''}" data-id="${a.id}">
         <div class="veille-card-meta">
           ${cat ? `<span class="veille-card-cat" style="background:${cat.color}20;color:${cat.color};border-color:${cat.color}40">${cat.name}</span>` : ''}
           <span class="veille-card-source">${a.feedName}</span>
@@ -3512,6 +3529,74 @@ function renderVeilleFeed() {
       renderVeilleBadge();
       renderVeilleCatsBar();
     });
+  });
+
+  // Swipe gestures on cards
+  container.querySelectorAll('.veille-card').forEach(card => {
+    addVeilleSwipe(card,
+      // swipe right → archive (mark read)
+      async () => {
+        const id = card.dataset.id;
+        await window.api.veilleMarkRead([id]);
+        const art = veilleArticles.find(a => a.id === id);
+        if (art) { art.read = true; art.readAt = new Date().toISOString(); }
+        card.classList.add('swipe-out-right');
+        setTimeout(() => { renderVeilleCatsBar(); renderVeilleFeed(); renderVeilleBadge(); }, 280);
+        showVeilleToast('🗄 Article archivé');
+      },
+      // swipe left → favorite
+      async () => {
+        const id = card.dataset.id;
+        const isFav = await window.api.veilleToggleFavorite(id);
+        const art = veilleArticles.find(a => a.id === id);
+        if (art) art.favorite = isFav;
+        card.classList.add('swipe-out-left');
+        setTimeout(() => { renderVeilleCatsBar(); renderVeilleFeed(); }, 280);
+        showVeilleToast(isFav ? '⭐ Ajouté aux favoris' : '☆ Retiré des favoris');
+      }
+    );
+  });
+}
+
+function addVeilleSwipe(card, onSwipeRight, onSwipeLeft) {
+  const THRESHOLD = 72;
+  let startX = 0;
+  let dragging = false;
+
+  card.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    startX = e.clientX;
+    dragging = true;
+    card.setPointerCapture(e.pointerId);
+    card.style.transition = 'none';
+  });
+
+  card.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const capped = Math.sign(dx) * Math.min(Math.abs(dx), 130);
+    card.style.transform = `translateX(${capped}px)`;
+    card.classList.toggle('swipe-hint-right', dx > THRESHOLD);
+    card.classList.toggle('swipe-hint-left',  dx < -THRESHOLD);
+  });
+
+  const end = async e => {
+    if (!dragging) return;
+    dragging = false;
+    const dx = e.clientX - startX;
+    card.style.transition = '';
+    card.style.transform = '';
+    card.classList.remove('swipe-hint-right', 'swipe-hint-left');
+    if (dx > THRESHOLD) await onSwipeRight();
+    else if (dx < -THRESHOLD) await onSwipeLeft();
+  };
+
+  card.addEventListener('pointerup', end);
+  card.addEventListener('pointercancel', () => {
+    dragging = false;
+    card.style.transition = '';
+    card.style.transform = '';
+    card.classList.remove('swipe-hint-right', 'swipe-hint-left');
   });
 }
 

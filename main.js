@@ -804,3 +804,11 @@ ipcMain.handle('veille-save-archive-settings', (_, settings) => {
 
 ipcMain.handle('veille-run-archive-cleanup', () => { runVeilleArchiveCleanup(); return true; });
 
+ipcMain.handle('veille-toggle-favorite', (_, id) => {
+  const arts = load('veille-articles', []);
+  const art = arts.find(a => a.id === id);
+  if (art) art.favorite = !art.favorite;
+  save('veille-articles', arts);
+  return art ? art.favorite : false;
+});
+
