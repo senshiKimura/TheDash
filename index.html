@@ -23,7 +23,19 @@
     </div>
   </div>
 
-  <div class="tab-bar" id="tab-bar"></div>
+  <div class="tab-bar-row">
+    <div class="tab-bar" id="tab-bar"></div>
+    <div class="notif-bell-wrap">
+      <button class="notif-bell-btn" id="btn-notif-bell" title="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="notif-badge hidden" id="notif-badge">0</span>
+      </button>
+      <div class="notif-panel hidden" id="notif-panel">
+        <div class="notif-panel-header">🔔 Notifications</div>
+        <div class="notif-panel-body" id="notif-panel-body"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="layout">
     <!-- SIDEBAR -->
@@ -240,6 +252,7 @@
             <h2 style="font-size:17px;font-weight:700;color:var(--text)">Tâches</h2>
             <div style="display:flex;gap:8px">
               <button class="btn-sm" id="btn-manage-cols">⚙ Colonnes</button>
+              <button class="btn-sm" id="btn-add-group">&#128193; Groupe</button>
               <button class="btn-sm" id="btn-add-task">+ Tâche</button>
             </div>
           </div>
@@ -643,6 +656,29 @@
     </div>
   </div>
 
+  <!-- ══ MODAL: Groupe de tâches ══ -->
+  <div class="modal-overlay" id="modal-task-group">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2 id="tg-modal-title">Nouveau groupe</h2><button class="modal-close" id="tg-modal-close">✕</button></div>
+      <div class="modal-body">
+        <label>Nom du groupe *</label>
+        <input type="text" id="tg-name" placeholder="Ex : Interface utilisateur, Backend..."/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="tg-btn-cancel">Annuler</button>
+        <button class="btn-primary" id="tg-btn-save">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: Ajouter au groupe ══ -->
+  <div class="modal-overlay" id="modal-pick-group">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Ajouter au groupe</h2><button class="modal-close" id="modal-pick-group-close">✕</button></div>
+      <div class="modal-body" id="pick-group-list" style="gap:6px;max-height:300px;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <!-- ══ MODAL: Doc/Link ══ -->
   <div class="modal-overlay" id="modal-doc">
     <div class="modal modal-sm">
@@ -747,6 +783,14 @@
     <button class="ctx-item ctx-proj-item" id="ctx-edit-proj">✏ Modifier</button>
     <div class="ctx-divider ctx-proj-item"></div>
     <button class="ctx-item danger ctx-proj-item" id="ctx-delete-proj">🗑 Supprimer</button>
+    <button class="ctx-item ctx-task-item" id="ctx-window-task">⧉ Ouvrir dans un onglet</button>
+    <button class="ctx-item ctx-task-item" id="ctx-edit-task">✏ Modifier</button>
+    <button class="ctx-item ctx-task-item" id="ctx-task-add-group">&#128193; Ajouter au groupe</button>
+    <button class="ctx-item ctx-task-item" id="ctx-task-remove-group">↩ Retirer du groupe</button>
+    <div class="ctx-divider ctx-task-item"></div>
+    <button class="ctx-item danger ctx-task-item" id="ctx-delete-task">🗑 Supprimer</button>
+    <button class="ctx-item ctx-taskgroup-item" id="ctx-group-edit">✏ Renommer le groupe</button>
+    <button class="ctx-item ctx-taskgroup-item" id="ctx-group-dissolve">↩ Dissoudre le groupe</button>
   </div>
 
   <!-- ══ MODAL: Rename ══ -->
@@ -1271,6 +1315,45 @@
       </div>
       <button class="focus-done-btn" id="focus-done-btn">✓ Marquer comme fait</button>
       <div class="focus-progress-info" id="focus-progress-info"></div>
+    </div>
+  </div>
+
+  <!-- ══ TASK DETAIL PANEL ══ -->
+  <div id="task-detail-overlay" class="task-detail-overlay hidden">
+    <div class="task-detail-panel" id="task-detail-panel">
+      <div class="task-detail-header">
+        <div class="task-detail-title-row">
+          <h2 id="tdp-title" class="task-detail-main-title"></h2>
+          <button class="tdp-edit-btn" id="tdp-edit-btn" title="Modifier la tâche">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Modifier
+          </button>
+          <button class="tdp-close-btn" id="tdp-close" title="Fermer">✕</button>
+        </div>
+        <div class="task-detail-badges" id="tdp-badges"></div>
+      </div>
+      <div class="task-detail-body">
+        <div class="task-detail-section" id="tdp-desc-section">
+          <div class="tdp-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Description
+          </div>
+          <div id="tdp-desc" class="tdp-desc-content"></div>
+        </div>
+        <div class="task-detail-section">
+          <div class="tdp-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            Commentaires
+          </div>
+          <div id="tdp-comments-list" class="tdp-comments-list"></div>
+          <div class="tdp-comment-compose">
+            <textarea id="tdp-comment-input" class="tdp-comment-textarea" placeholder="Ajouter un commentaire..." rows="2"></textarea>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+              <button class="btn-primary" id="tdp-add-comment-btn" style="font-size:12px;padding:6px 14px">Envoyer</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

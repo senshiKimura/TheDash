@@ -49,7 +49,23 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .tb-btn.close:hover{background:var(--danger);color:#fff}
 
 /* ── Tab bar ── */
-.tab-bar{height:36px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 8px;gap:2px;flex-shrink:0;-webkit-app-region:no-drag;overflow-x:auto;overflow-y:hidden}
+.tab-bar-row{display:flex;align-items:stretch;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab-bar{flex:1;min-width:0;height:36px;background:transparent;border-bottom:none;display:flex;align-items:flex-end;padding:0 8px;gap:2px;-webkit-app-region:no-drag;overflow-x:auto;overflow-y:hidden}
+.notif-bell-wrap{position:relative;flex-shrink:0;display:flex;align-items:center;padding:0 10px;border-left:1px solid var(--border)}
+.notif-bell-btn{background:none;border:none;cursor:pointer;color:var(--text2);position:relative;padding:5px;border-radius:var(--rsm);display:flex;align-items:center;transition:all var(--t)}
+.notif-bell-btn:hover{background:var(--bg3);color:var(--text)}
+.notif-badge{position:absolute;top:0;right:0;background:var(--danger);color:#fff;font-size:8px;font-weight:700;border-radius:99px;min-width:14px;height:14px;display:flex;align-items:center;justify-content:center;padding:0 3px;pointer-events:none}
+.notif-badge.hidden{display:none}
+.notif-panel{position:absolute;top:calc(100% + 6px);right:0;width:300px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh3);z-index:2000;max-height:380px;display:flex;flex-direction:column;overflow:hidden}
+.notif-panel.hidden{display:none}
+.notif-panel-header{padding:10px 14px;font-weight:700;font-size:12px;border-bottom:1px solid var(--border);color:var(--text);flex-shrink:0}
+.notif-panel-body{overflow-y:auto;flex:1}
+.notif-item{padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--t)}
+.notif-item:last-child{border-bottom:none}
+.notif-item:hover{background:var(--bg3)}
+.notif-item-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px}
+.notif-item-meta{font-size:10px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.notif-empty{padding:20px 14px;text-align:center;color:var(--text3);font-size:12px}
 .tab-bar::-webkit-scrollbar{height:3px}
 .tab-bar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 .app-tab{display:flex;align-items:center;gap:6px;padding:0 12px;height:30px;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:none;font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);background:transparent;transition:all .15s;max-width:200px;flex-shrink:0;white-space:nowrap;overflow:hidden;user-select:none}
@@ -218,6 +234,10 @@ h1{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em}
 .task-badge.high{background:var(--danger-bg);color:var(--danger)}
 .task-badge.medium{background:var(--warn-bg);color:var(--warn)}
 .task-badge.low{background:var(--done-bg);color:var(--done)}
+.task-status-chip{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;flex-shrink:0}
+.task-status-chip.todo{background:var(--bg4);color:var(--text3)}
+.task-status-chip.inprog{background:var(--warn-bg);color:var(--warn)}
+.task-status-chip.done{background:var(--done-bg);color:var(--done)}
 .task-deadline-chip{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;flex-shrink:0}
 .task-deadline-chip.overdue{background:var(--danger-bg);color:var(--danger)}
 .task-deadline-chip.soon{background:var(--warn-bg);color:var(--warn)}
@@ -418,7 +438,28 @@ h1{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em}
 .postit-del:hover{background:rgba(0,0,0,.25);color:#000}
 .postit-empty{font-size:13px;color:var(--text3);padding:20px 0;grid-column:1/-1}
 
-/* ── Kanban board ── */
+/* ── Kanban group cards ── */
+.kanban-group-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);flex-shrink:0}
+.kanban-group-card:hover{border-color:var(--accent)}
+.kanban-group-header{display:flex;align-items:center;gap:7px;padding:9px 10px;cursor:pointer;user-select:none;transition:background var(--t)}
+.kanban-group-header:hover{background:var(--bg3)}
+.kanban-group-toggle{background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;transition:all var(--t);flex-shrink:0}
+.kanban-group-toggle:hover{background:var(--bg4);color:var(--text)}
+.kanban-group-icon{font-size:13px;flex-shrink:0}
+.kanban-group-name{font-size:12px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kanban-group-count{font-size:10px;background:var(--accent-bg);color:var(--accent);border-radius:99px;padding:1px 7px;font-weight:700;flex-shrink:0}
+.kanban-group-progress{height:2px;background:var(--border);overflow:hidden}
+.kanban-group-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s ease}
+.kanban-group-body{padding:6px;display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);transition:background var(--t)}
+.kanban-group-body .kanban-task-card{border-left:2px solid var(--accent);margin-left:2px}
+.kanban-group-body.drag-over{background:var(--accent-bg);border-color:var(--accent)}
+.kanban-group-card.drag-over-header .kanban-group-header{background:var(--accent-bg);border-radius:var(--r) var(--r) 0 0}
+.kanban-group-add-btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:6px;border:1px dashed var(--border2);border-radius:var(--rsm);background:none;color:var(--text3);font-size:11px;cursor:pointer;transition:all var(--t);font-family:inherit;margin-top:2px}
+.kanban-group-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.kanban-group-actions{display:flex;gap:2px;flex-shrink:0;margin-left:auto}
+.kanban-group-btn{background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:all var(--t)}
+.kanban-group-btn:hover{background:var(--bg4);color:var(--text)}
+
 #dtab-taches.active{display:flex;flex-direction:column;height:100%;overflow:hidden;padding:20px 24px}
 .kanban-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0}
 .kanban-board{display:flex;gap:14px;flex:1;overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
@@ -555,6 +596,12 @@ h1{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-.02em}
 .v2-task-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .v2-task-proj{font-size:10px;color:var(--text3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .v2-task-dl{font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600}
+.v2-group-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;transition:border-color var(--t)}
+.v2-group-card:hover{border-color:var(--accent)}
+.v2-group-name{font-size:12px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:5px;margin-bottom:3px}
+.v2-group-meta{display:flex;align-items:center;gap:6px}
+.v2-group-proj{font-size:10px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2-group-count{font-size:10px;background:var(--accent-bg);color:var(--accent);border-radius:99px;padding:1px 6px;font-weight:700;flex-shrink:0}
 
 
 /* ── Whiteboard ── */
@@ -1017,3 +1064,47 @@ mark.veille-hl{background:rgba(37,99,235,.2);color:inherit;border-radius:2px;pad
 .v2-veille-recent:hover{background:var(--bg3)}
 .v2-veille-title{font-size:12px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .v2-veille-read .v2-veille-title{color:var(--text3)}
+
+/* ══ TASK DETAIL PANEL ══════════════════════════════════════════════════════ */
+.task-detail-overlay{position:fixed;inset:0;z-index:1100;background:rgba(15,23,42,.48);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center}
+.task-detail-overlay.hidden{display:none}
+.task-detail-panel{width:640px;max-width:92vw;max-height:88vh;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);display:flex;flex-direction:column;box-shadow:var(--sh3);animation:slideUp .2s ease}
+.task-detail-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg2);border-radius:var(--r) var(--r) 0 0}
+.task-detail-title-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.task-detail-main-title{font-size:16px;font-weight:700;color:var(--text);flex:1;line-height:1.4;word-break:break-word}
+.tdp-edit-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1.5px solid var(--accent);color:var(--accent);background:var(--accent-bg);border-radius:var(--rsm);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:all var(--t)}
+.tdp-edit-btn:hover{background:var(--accent);color:#fff}
+.tdp-close-btn{width:28px;height:28px;border:none;background:none;color:var(--text3);font-size:14px;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all var(--t)}
+.tdp-close-btn:hover{background:var(--bg4);color:var(--text)}
+.task-detail-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.task-detail-body{flex:1;overflow-y:auto;padding:0}
+.task-detail-body::-webkit-scrollbar{width:4px}
+.task-detail-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+.task-detail-section{padding:18px 20px;border-bottom:1px solid var(--border)}
+.task-detail-section:last-child{border-bottom:none}
+.tdp-section-title{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.tdp-desc-content{font-size:13px;color:var(--text2);line-height:1.7;min-height:28px}
+.tdp-desc-content:empty::after{content:'Aucune description';color:var(--text3);font-style:italic;font-size:12px}
+.tdp-comments-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.tdp-comment-item{background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--rsm);padding:10px 12px;position:relative}
+.tdp-comment-item:hover .tdp-comment-del{opacity:1}
+.tdp-comment-date{font-size:10px;color:var(--text3);font-weight:500;margin-bottom:5px}
+.tdp-comment-text{font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.tdp-comment-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;opacity:0;transition:all var(--t);padding:2px 5px;border-radius:4px}
+.tdp-comment-del:hover{color:var(--danger);background:var(--danger-bg)}
+.tdp-comments-empty{font-size:12px;color:var(--text3);text-align:center;padding:14px 0;font-style:italic}
+.tdp-comment-compose{background:var(--bg3);border:1px solid var(--border);border-radius:var(--rsm);overflow:hidden}
+.tdp-comment-textarea{width:100%;padding:10px 12px;border:none;background:transparent;color:var(--text);font-size:13px;font-family:inherit;resize:none;outline:none;line-height:1.5}
+.tdp-comment-textarea:focus{box-shadow:0 0 0 2px var(--accent) inset}
+.tdp-comment-send{display:flex;justify-content:flex-end;padding:6px 10px;border-top:1px solid var(--border);background:var(--bg2)}
+.tdp-priority-badge{font-size:11px;padding:3px 9px;border-radius:99px;font-weight:700}
+.tdp-priority-badge.high{background:var(--danger-bg);color:var(--danger)}
+.tdp-priority-badge.medium{background:var(--warn-bg);color:var(--warn)}
+.tdp-priority-badge.low{background:var(--done-bg);color:var(--done)}
+.tdp-status-badge{font-size:11px;padding:3px 9px;border-radius:99px;font-weight:600;background:var(--bg3);border:1px solid var(--border);color:var(--text2)}
+.tdp-status-badge.done{background:var(--done-bg);color:var(--done);border-color:rgba(16,185,129,.25)}
+.tdp-status-badge.in-progress{background:var(--accent-bg);color:var(--accent);border-color:rgba(37,99,235,.25)}
+.tdp-deadline-badge{font-size:11px;padding:3px 9px;border-radius:99px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.tdp-deadline-badge.overdue{background:var(--danger-bg);color:var(--danger)}
+.tdp-deadline-badge.soon{background:var(--warn-bg);color:var(--warn)}
+.tdp-deadline-badge.ok{background:var(--done-bg);color:var(--done)}

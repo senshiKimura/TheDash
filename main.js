@@ -36,7 +36,12 @@ function load(name, def = []) {
   try { const v = JSON.parse(fs.readFileSync(f, 'utf-8')); return v ?? def; }
   catch { return def; }
 }
-function save(name, data) { fs.writeFileSync(dataFile(name), JSON.stringify(data, null, 2)); }
+function save(name, data) {
+  const f = dataFile(name);
+  const tmp = f + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, f); // atomic — prevents corruption if app crashes during write
+}
 
 // ── Window ───────────────────────────────────────────────────────────────────
 let mainWin;

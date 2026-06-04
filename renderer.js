@@ -96,6 +96,28 @@ function openProjectInTab(projectId) {
   openProjectDetail(p.id);
 }
 
+function openTaskInTab(taskIdx, projectId) {
+  // Switch to (or open) the parent project tab, then show the task detail
+  const pid = projectId || currentProjectId;
+  const p = projects.find(x => x.id === pid);
+  if (!p) return;
+  const t = p.tasks?.[taskIdx];
+  if (!t) return;
+  // Open project in a tab (reuses existing if already open)
+  const existing = openTabs.find(tab => tab.type === 'project' && tab.projectId === pid);
+  if (existing) {
+    switchTab(existing.id);
+  } else {
+    const tabId = 'proj-' + pid;
+    openTabs.push({ id: tabId, type: 'project', projectId: pid, label: p.title });
+    activeTabId = tabId;
+    renderTabBar();
+    openProjectDetail(pid);
+  }
+  // Show the task detail after a frame so the board has rendered
+  requestAnimationFrame(() => openTaskDetail(taskIdx));
+}
+
 function switchTab(tabId) {
   activeTabId = tabId;
   renderTabBar();
@@ -285,6 +307,7 @@ async function init() {
     renderHome(); renderProjects(); navTo('projects');
   }));
   on('btn-add-task', 'click', () => openTaskModal());
+  on('btn-add-group', 'click', () => openTaskGroupModal());
   on('btn-add-file', 'click', addFilesToProject);
   on('btn-add-doc', 'click', () => openModal('modal-doc'));
   on('btn-add-comment', 'click', addComment);
@@ -300,6 +323,26 @@ async function init() {
   on('modal-task-close', 'click', () => closeModal('modal-task'));
   on('btn-cancel-task', 'click', () => closeModal('modal-task'));
   on('btn-save-task', 'click', saveTask);
+
+  // Task group modal
+  on('tg-modal-close', 'click', () => closeModal('modal-task-group'));
+  on('tg-btn-cancel', 'click', () => closeModal('modal-task-group'));
+  on('tg-btn-save', 'click', saveTaskGroup);
+  q('tg-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') saveTaskGroup(); });
+
+  // Pick group modal
+  on('modal-pick-group-close', 'click', () => closeModal('modal-pick-group'));
+
+  // Task detail panel
+  on('tdp-close', 'click', closeTaskDetail);
+  on('tdp-edit-btn', 'click', () => { const idx = detailTaskIdx; closeTaskDetail(); openTaskModal(idx); });
+  on('tdp-add-comment-btn', 'click', addTaskDetailComment);
+  q('tdp-comment-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTaskDetailComment(); }
+  });
+  q('task-detail-overlay')?.addEventListener('click', (e) => {
+    if (e.target === q('task-detail-overlay')) closeTaskDetail();
+  });
 
   // Reminder modal
   on('modal-reminder-close', 'click', () => closeModal('modal-reminder'));
@@ -445,8 +488,17 @@ async function init() {
   qAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
 
   // Context menu
-  document.addEventListener('click', (e) => { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCtxMenu(); closeFocusMode(); } });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ctx-menu')) hideCtxMenu();
+    if (!e.target.closest('.notif-bell-wrap') && _notifPanelOpen) {
+      _notifPanelOpen = false;
+      q('notif-panel')?.classList.add('hidden');
+    }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCtxMenu(); closeFocusMode(); closeTaskDetail(); } });
+
+  // Notification bell
+  on('btn-notif-bell', 'click', toggleNotifPanel);
   on('ctx-open-folder', 'click', () => {
     if (ctxMenuTarget?.type === 'resource' && ctxMenuTarget.data.value) window.api.showItemInFolder(ctxMenuTarget.data.value);
     hideCtxMenu();
@@ -506,6 +558,64 @@ async function init() {
           renderProjects();
         });
       }
+    }
+    hideCtxMenu();
+  });
+
+  // Task context menu
+  on('ctx-window-task', 'click', () => {
+    if (ctxMenuTarget?.type === 'task') {
+      const { idx, projectId } = ctxMenuTarget.data;
+      openTaskInTab(idx, projectId);
+    }
+    hideCtxMenu();
+  });
+  on('ctx-edit-task', 'click', () => {
+    if (ctxMenuTarget?.type === 'task') {
+      const { idx } = ctxMenuTarget.data;
+      closeTaskDetail();
+      openTaskModal(idx);
+    }
+    hideCtxMenu();
+  });
+  on('ctx-task-add-group', 'click', () => {
+    if (ctxMenuTarget?.type === 'task') {
+      const { idx } = ctxMenuTarget.data;
+      hideCtxMenu();
+      openPickGroupModal(idx);
+    }
+  });
+  on('ctx-task-remove-group', 'click', () => {
+    if (ctxMenuTarget?.type === 'task') {
+      removeTaskFromGroup(ctxMenuTarget.data.idx);
+    }
+    hideCtxMenu();
+  });
+  on('ctx-delete-task', 'click', () => {
+    if (ctxMenuTarget?.type === 'task') {
+      const { idx } = ctxMenuTarget.data;
+      const p = proj();
+      const t = p?.tasks?.[idx];
+      if (t) {
+        confirmAction(`Supprimer la tâche "${t.title}" ?`, () => removeTask(idx));
+      }
+    }
+    hideCtxMenu();
+  });
+
+  // Task group context menu
+  on('ctx-group-edit', 'click', () => {
+    if (ctxMenuTarget?.type === 'task-group') {
+      openTaskGroupRenameModal(ctxMenuTarget.data.idx);
+    }
+    hideCtxMenu();
+  });
+  on('ctx-group-dissolve', 'click', () => {
+    if (ctxMenuTarget?.type === 'task-group') {
+      const { idx } = ctxMenuTarget.data;
+      const p = proj();
+      const g = p?.tasks?.[idx];
+      if (g) confirmAction(`Dissoudre le groupe "${g.title}" ?\nLes tâches resteront dans la colonne.`, () => dissolveGroup(idx));
     }
     hideCtxMenu();
   });
@@ -862,10 +972,16 @@ function renderHomeV2() {
       projects.map(p => `<option value="${p.id}"${p.id === prev ? ' selected' : ''}>${escHtml(p.title)}</option>`).join('');
   }
   const allTasks = [];
+  const allGroups = [];
   for (const p of projects) {
     if (filterPid && p.id !== filterPid) continue;
     for (const t of (p.tasks || [])) {
-      allTasks.push({ task: t, project: p });
+      if (t.isGroup) {
+        const children = (p.tasks || []).filter(c => !c.isGroup && c.groupId === t.id);
+        allGroups.push({ group: t, project: p, children });
+      } else {
+        allTasks.push({ task: t, project: p });
+      }
     }
   }
   const total = allTasks.length;
@@ -877,6 +993,10 @@ function renderHomeV2() {
   const urgentTasks = allTasks.filter(({ task: t }) => t.status !== 'done' && (t.priority === 'high' || (t.deadline && daysUntil(t.deadline) <= 2)));
   const doneTasks   = allTasks.filter(({ task: t }) => t.status === 'done'      || t.colId === 'col-done');
 
+  const todoGroups   = allGroups.filter(({ group }) => !group.colId || group.colId === 'col-todo');
+  const inprogGroups = allGroups.filter(({ group }) => group.colId === 'col-inprog');
+  const doneGroups   = allGroups.filter(({ group }) => group.colId === 'col-done');
+
   function v2TaskCard({ task: t, project: p }) {
     const dlChip = t.deadline ? `<span class="v2-task-dl ${deadlineClass(t.deadline)}">${formatDeadlineShort(t.deadline)}</span>` : '';
     return `<div class="v2-task-card" data-pid="${p.id}" style="cursor:pointer" title="${escHtml(p.title)}">
@@ -885,36 +1005,39 @@ function renderHomeV2() {
     </div>`;
   }
 
+  function v2GroupCard({ group, project, children }) {
+    const done = children.filter(t => t.status === 'done' || t.colId === 'col-done').length;
+    return `<div class="v2-group-card" data-pid="${project.id}" style="cursor:pointer">
+      <div class="v2-group-name">📁 ${escHtml(group.title)}</div>
+      <div class="v2-group-meta"><span class="v2-group-proj">${escHtml(project.title)}</span><span class="v2-group-count">${done}/${children.length}</span></div>
+    </div>`;
+  }
+
   [
-    { id: 'v2-body-todo',   cnt: 'v2-cnt-todo',   list: todoTasks },
-    { id: 'v2-body-inprog', cnt: 'v2-cnt-inprog',  list: inprogTasks },
-    { id: 'v2-body-urgent', cnt: 'v2-cnt-urgent',  list: urgentTasks },
-    { id: 'v2-body-done',   cnt: 'v2-cnt-done',    list: doneTasks },
-  ].forEach(({ id, cnt, list }) => {
-    const el = q(id); if (el) el.innerHTML = list.length ? list.map(v2TaskCard).join('') : '<div class="v2-kcol-empty">—</div>';
-    const ce = q(cnt); if (ce) ce.textContent = list.length;
+    { id: 'v2-body-todo',   cnt: 'v2-cnt-todo',   list: todoTasks,   groups: todoGroups },
+    { id: 'v2-body-inprog', cnt: 'v2-cnt-inprog',  list: inprogTasks, groups: inprogGroups },
+    { id: 'v2-body-urgent', cnt: 'v2-cnt-urgent',  list: urgentTasks, groups: [] },
+    { id: 'v2-body-done',   cnt: 'v2-cnt-done',    list: doneTasks,   groups: doneGroups },
+  ].forEach(({ id, cnt, list, groups }) => {
+    const groupsHtml = (groups || []).map(v2GroupCard).join('');
+    const tasksHtml  = list.map(v2TaskCard).join('');
+    const el = q(id);
+    if (el) el.innerHTML = (groupsHtml + tasksHtml) || '<div class="v2-kcol-empty">—</div>';
+    const ce = q(cnt); if (ce) ce.textContent = list.length + (groups || []).length;
   });
-  // Click on task card → open project detail
+  // Click on task/group card → open project detail
   const kanbanRow = q('v2-kanban-row');
   if (kanbanRow) {
-    kanbanRow.querySelectorAll('.v2-task-card[data-pid]').forEach(el => {
+    kanbanRow.querySelectorAll('.v2-task-card[data-pid], .v2-group-card[data-pid]').forEach(el => {
       el.addEventListener('click', () => openProjectDetail(el.dataset.pid));
     });
   }
 
-  // Sidebar upcoming deadlines
+  // Clear sidebar deadlines (moved to bell notification)
   const sidebarDl = document.getElementById('sidebar-deadlines');
-  if (sidebarDl) {
-    const upcoming = projects.filter(p => p.deadline && p.status !== 'termine' && daysUntil(p.deadline) <= 3)
-      .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-    if (upcoming.length) {
-      sidebarDl.innerHTML = '<div class="sidebar-label">⚠️ Échéances proches</div>' +
-        upcoming.map(p => `<div class="sidebar-deadlines-item" data-id="${p.id}" style="cursor:pointer">🔔 ${escHtml(p.title.slice(0, 18))} · ${formatDeadlineShort(p.deadline)}</div>`).join('');
-      sidebarDl.querySelectorAll('[data-id]').forEach(el => {
-        el.addEventListener('click', () => openProjectDetail(el.dataset.id));
-      });
-    } else sidebarDl.innerHTML = '';
-  }
+  if (sidebarDl) sidebarDl.innerHTML = '';
+
+  updateNotifBell();
 }
 
 function renderHomeList(id, list) {
@@ -930,7 +1053,64 @@ function renderHomeList(id, list) {
   el.querySelectorAll('.proj-card-sm').forEach(c => c.addEventListener('click', () => openProjectDetail(c.dataset.id)));
 }
 
-// ══ PROJECTS ══════════════════════════════════════════════════════════
+// ══ NOTIFICATIONS ════════════════════════════════════════════════════
+function getUpcomingNotifs() {
+  const notifs = [];
+  for (const p of projects) {
+    if (p.deadline && p.status !== 'termine' && daysUntil(p.deadline) <= 7) {
+      notifs.push({ type: 'project', label: p.title, deadline: p.deadline, id: p.id, sub: 'Projet' });
+    }
+  }
+  for (const p of projects) {
+    for (const t of (p.tasks || [])) {
+      if (!t.isGroup && t.deadline && t.status !== 'done' && t.colId !== 'col-done' && daysUntil(t.deadline) <= 3) {
+        notifs.push({ type: 'task', label: t.title, deadline: t.deadline, id: p.id, sub: p.title });
+      }
+    }
+  }
+  return notifs.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+}
+
+function updateNotifBell() {
+  const badge = q('notif-badge');
+  if (!badge) return;
+  const notifs = getUpcomingNotifs();
+  badge.textContent = notifs.length;
+  badge.classList.toggle('hidden', notifs.length === 0);
+}
+
+let _notifPanelOpen = false;
+
+function toggleNotifPanel(e) {
+  e?.stopPropagation();
+  const panel = q('notif-panel');
+  if (!panel) return;
+  _notifPanelOpen = !_notifPanelOpen;
+  panel.classList.toggle('hidden', !_notifPanelOpen);
+  if (_notifPanelOpen) renderNotifPanel();
+}
+
+function renderNotifPanel() {
+  const body = q('notif-panel-body');
+  if (!body) return;
+  const notifs = getUpcomingNotifs();
+  if (!notifs.length) {
+    body.innerHTML = '<div class="notif-empty">Aucune échéance proche 🎉</div>';
+    return;
+  }
+  body.innerHTML = notifs.map(n => {
+    const dlClass = deadlineClass(n.deadline);
+    const dlLabel = formatDeadlineShort(n.deadline);
+    const icon = n.type === 'project' ? '📋' : '✅';
+    return `<div class="notif-item" data-id="${n.id}" data-type="${n.type}">
+      <div class="notif-item-title">${icon} ${escHtml(n.label)}</div>
+      <div class="notif-item-meta"><span>${escHtml(n.sub)}</span><span class="task-deadline-chip ${dlClass}" style="font-size:10px">${dlLabel}</span></div>
+    </div>`;
+  }).join('');
+  body.querySelectorAll('.notif-item[data-id]').forEach(el => {
+    el.addEventListener('click', () => { openProjectDetail(el.dataset.id); toggleNotifPanel(); });
+  });
+}
 function projectCardHtml(p) {
   const tasks = p.tasks || [];
   const doneTasks = tasks.filter(t => t.status === 'done').length;
@@ -1014,7 +1194,7 @@ function renderProjects() {
         if (g) showCtxMenu(e, 'group', g);
       });
     });
-    q('btn-new-group-card')?.addEventListener('click', () => openGroupModal());
+    q('btn-new-group-card')?.addEventListener('click', () => openGroupModal()); // project groups
 
   } else {
     // ── Group view: back header + projects in group ──
@@ -1152,22 +1332,51 @@ function renderTasks(p) {
 
   board.innerHTML = cols.map(col => {
     const colTasks = tasks.map((t, i) => ({ t, i })).filter(({ t }) => (t.colId || 'col-todo') === col.id);
+
+    // Separate: groups, children (belong to a group), ungrouped
+    const groups   = colTasks.filter(({ t }) => t.isGroup);
+    const children = colTasks.filter(({ t }) => !t.isGroup && t.groupId);
+    const ungrouped = colTasks.filter(({ t }) => !t.isGroup && !t.groupId);
+
+    const totalCount = colTasks.length; // includes all (groups + children + ungrouped)
+
+    const colHtml = [
+      ...groups.map(({ t: g, i: gi }) => {
+        const gChildren = children.filter(({ t }) => t.groupId === g.id);
+        return kanbanGroupCard(g, gi, gChildren, col);
+      }),
+      ...ungrouped.map(({ t, i }) => kanbanTaskCard(t, i, col))
+    ].join('');
+
     return `<div class="kanban-col" data-col="${col.id}">
       <div class="kanban-col-header" style="border-top-color:${col.color}">
         <span class="kanban-col-dot" style="background:${col.color}"></span>
         <span class="kanban-col-name">${escHtml(col.name)}</span>
-        <span class="kanban-col-count">${colTasks.length}</span>
+        <span class="kanban-col-count">${totalCount}</span>
         <button class="kanban-col-add" data-col="${col.id}" title="Ajouter dans cette colonne">+</button>
       </div>
       <div class="kanban-col-body" data-col="${col.id}">
-        ${colTasks.map(({ t, i }) => kanbanTaskCard(t, i, col)).join('')}
+        ${colHtml}
         <div class="kanban-drop-hint">Déposer ici</div>
       </div>
     </div>`;
   }).join('');
 
+  // === Column add buttons ===
   board.querySelectorAll('.kanban-col-add').forEach(btn => {
     btn.addEventListener('click', () => openTaskModal(null, btn.dataset.col));
+  });
+
+  // === Task cards: click to detail, right-click context menu ===
+  board.querySelectorAll('.kanban-task-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      openTaskDetail(parseInt(card.dataset.idx));
+    });
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showCtxMenu(e, 'task', { idx: parseInt(card.dataset.idx), projectId: currentProjectId });
+    });
   });
   board.querySelectorAll('.task-check').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation(); toggleTask(parseInt(el.dataset.idx));
@@ -1182,7 +1391,28 @@ function renderTasks(p) {
     e.stopPropagation(); openFocusMode(currentProjectId, parseInt(el.dataset.idx));
   }));
 
-  // Drag & drop
+  // === Group cards ===
+  board.querySelectorAll('.kanban-group-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleGroupCollapse(parseInt(btn.dataset.groupIdx));
+    });
+  });
+  board.querySelectorAll('.kanban-group-header').forEach(hdr => {
+    hdr.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showCtxMenu(e, 'task-group', { idx: parseInt(hdr.dataset.groupIdx) });
+    });
+  });
+  board.querySelectorAll('.kanban-group-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const colId = btn.dataset.col;
+      const groupId = btn.dataset.groupId;
+      openTaskModal(null, colId, groupId);
+    });
+  });
+
+  // === Drag & drop ===
   board.querySelectorAll('.kanban-task-card').forEach(card => {
     card.setAttribute('draggable', true);
     card.addEventListener('dragstart', (e) => {
@@ -1200,12 +1430,64 @@ function renderTasks(p) {
       if (!isNaN(idx)) moveTaskToCol(idx, body.dataset.col);
     });
   });
+  // Drop into group body (expanded)
+  board.querySelectorAll('.kanban-group-body').forEach(gbody => {
+    gbody.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); gbody.classList.add('drag-over'); });
+    gbody.addEventListener('dragleave', (e) => { if (!gbody.contains(e.relatedTarget)) gbody.classList.remove('drag-over'); });
+    gbody.addEventListener('drop', (e) => {
+      e.preventDefault(); e.stopPropagation(); gbody.classList.remove('drag-over');
+      const idx = parseInt(e.dataTransfer.getData('text/plain'));
+      if (!isNaN(idx)) moveTaskToGroup(idx, gbody.dataset.groupId, gbody.dataset.col);
+    });
+  });
+  // Drop onto group header (collapsed or expanded)
+  board.querySelectorAll('.kanban-group-card').forEach(card => {
+    const hdr = card.querySelector('.kanban-group-header');
+    if (!hdr) return;
+    hdr.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); card.classList.add('drag-over-header'); });
+    hdr.addEventListener('dragleave', (e) => { if (!card.contains(e.relatedTarget)) card.classList.remove('drag-over-header'); });
+    hdr.addEventListener('drop', (e) => {
+      e.preventDefault(); e.stopPropagation(); card.classList.remove('drag-over-header');
+      const idx = parseInt(e.dataTransfer.getData('text/plain'));
+      if (!isNaN(idx)) moveTaskToGroup(idx, card.dataset.groupId, card.dataset.col);
+    });
+  });
 }
+
+function kanbanGroupCard(group, groupIdx, children, col) {
+  const collapsed = group.collapsed;
+  const doneCount = children.filter(({ t }) => t.status === 'done' || col.id === 'col-done').length;
+  const total = children.length;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const childrenHtml = children.map(({ t, i }) => kanbanTaskCard(t, i, col)).join('');
+  return `<div class="kanban-group-card" data-group-id="${group.id}" data-group-idx="${groupIdx}" data-col="${group.colId || col.id}">
+    <div class="kanban-group-header" data-group-idx="${groupIdx}">
+      <button class="kanban-group-toggle" data-group-idx="${groupIdx}" title="${collapsed ? 'Développer' : 'Réduire'}">
+        ${collapsed ? '▶' : '▼'}
+      </button>
+      <span class="kanban-group-icon">📁</span>
+      <span class="kanban-group-name">${escHtml(group.title)}</span>
+      <span class="kanban-group-count">${doneCount}/${total}</span>
+    </div>
+    <div class="kanban-group-progress"><div class="kanban-group-progress-bar" style="width:${pct}%"></div></div>
+    ${!collapsed ? `<div class="kanban-group-body" data-group-id="${group.id}" data-col="${group.colId || col.id}">
+      ${childrenHtml}
+      <button class="kanban-group-add-btn" data-group-id="${group.id}" data-col="${group.colId || col.id}">+ Ajouter une tâche</button>
+    </div>` : ''}
+  </div>`;
+}
+
+
 
 function kanbanTaskCard(t, idx, col) {
   const isDone = t.status === 'done' || col.id === 'col-done';
   const dlChip = t.deadline ? `<span class="task-deadline-chip ${deadlineClass(t.deadline)}">${formatDeadlineShort(t.deadline)}</span>` : '';
-  return `<div class="kanban-task-card ${isDone ? 'done-task' : ''}" data-idx="${idx}" data-id="${t.id}">
+  const commentCount = (t.comments || []).length;
+  const commentBadge = commentCount > 0 ? `<span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:2px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>${commentCount}</span>` : '';
+  const statusClass = col.id === 'col-done' ? 'done' : col.id === 'col-inprog' ? 'inprog' : 'todo';
+  const statusLabel = col.id === 'col-done' ? 'Terminé' : col.id === 'col-inprog' ? 'En cours' : 'À faire';
+  const statusChip = `<span class="task-status-chip ${statusClass}">${statusLabel}</span>`;
+  return `<div class="kanban-task-card ${isDone ? 'done-task' : ''}" data-idx="${idx}" data-id="${t.id}" style="cursor:pointer">
     <div class="kanban-task-top">
       <div class="task-check ${isDone ? 'checked' : ''}" data-idx="${idx}" title="Marquer">${isDone ? '✓' : ''}</div>
       <div class="kanban-task-info">
@@ -1214,8 +1496,10 @@ function kanbanTaskCard(t, idx, col) {
       </div>
     </div>
     <div class="kanban-task-footer">
+      ${statusChip}
       <span class="task-badge ${t.priority || 'low'}">${priorityLabel(t.priority)}</span>
       ${dlChip}
+      ${commentBadge}
       <div style="margin-left:auto;display:flex;gap:2px">
         <button class="task-focus-btn" data-idx="${idx}" title="Mode focus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button class="task-edit-btn" data-idx="${idx}" title="Modifier"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -1229,9 +1513,24 @@ async function moveTaskToCol(taskIdx, colId) {
   const p = proj(); if (!p) return;
   if (!p.tasks[taskIdx]) return;
   p.tasks[taskIdx].colId = colId;
+  delete p.tasks[taskIdx].groupId; // leaving a column drop zone removes group membership
   if (colId === 'col-todo') p.tasks[taskIdx].status = 'todo';
   else if (colId === 'col-inprog') p.tasks[taskIdx].status = 'in-progress';
   else if (colId === 'col-done') p.tasks[taskIdx].status = 'done';
+  projects = await window.api.saveProject(p);
+  renderTasks(p); renderHome(); renderProjects();
+}
+
+async function moveTaskToGroup(taskIdx, groupId, colId) {
+  const p = proj(); if (!p) return;
+  const t = p.tasks[taskIdx]; if (!t || t.isGroup) return;
+  t.groupId = groupId;
+  if (colId) {
+    t.colId = colId;
+    if (colId === 'col-todo') t.status = 'todo';
+    else if (colId === 'col-inprog') t.status = 'in-progress';
+    else if (colId === 'col-done') t.status = 'done';
+  }
   projects = await window.api.saveProject(p);
   renderTasks(p); renderHome(); renderProjects();
 }
@@ -1661,9 +1960,96 @@ async function saveProject() {
 }
 
 // ══ TASKS ═════════════════════════════════════════════════════════════
-function openTaskModal(idx = null, colId = null) {
+
+// ── Task Detail Panel ────────────────────────────────────────────────
+let detailTaskIdx = null;
+let _pendingGroupId = null;
+
+function openTaskDetail(idx) {
+  const p = proj(); if (!p) return;
+  const t = (p.tasks || [])[idx]; if (!t) return;
+  detailTaskIdx = idx;
+
+  // Title
+  q('tdp-title').textContent = t.title;
+
+  // Badges
+  const isDone = t.status === 'done' || t.colId === 'col-done';
+  const statusLabel = isDone ? 'Terminé' : t.status === 'in-progress' ? 'En cours' : 'À faire';
+  const statusCls = isDone ? 'done' : t.status === 'in-progress' ? 'in-progress' : '';
+  const priorityLabel = t.priority === 'high' ? '🔴 Haute' : t.priority === 'medium' ? '🟡 Moyenne' : '🟢 Basse';
+  let badgesHtml = `<span class="tdp-status-badge ${statusCls}">${statusLabel}</span>
+    <span class="tdp-priority-badge ${t.priority || 'low'}">${priorityLabel}</span>`;
+  if (t.deadline) {
+    const dlCls = deadlineClass(t.deadline);
+    badgesHtml += `<span class="tdp-deadline-badge ${dlCls}">📅 ${formatDeadlineShort(t.deadline)}</span>`;
+  }
+  q('tdp-badges').innerHTML = badgesHtml;
+
+  // Description
+  const descEl = q('tdp-desc');
+  descEl.innerHTML = t.description || '';
+
+  // Comments
+  renderTaskDetailComments(t);
+
+  // Show overlay
+  q('task-detail-overlay').classList.remove('hidden');
+}
+
+function closeTaskDetail() {
+  q('task-detail-overlay').classList.add('hidden');
+  detailTaskIdx = null;
+}
+
+function renderTaskDetailComments(task) {
+  const list = q('tdp-comments-list');
+  if (!list) return;
+  const comments = task.comments || [];
+  if (!comments.length) {
+    list.innerHTML = '<div class="tdp-comments-empty">Aucun commentaire pour l\'instant</div>';
+    return;
+  }
+  list.innerHTML = comments.map(c => `
+    <div class="tdp-comment-item" data-cid="${c.id}">
+      <div class="tdp-comment-date">${new Date(c.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+      <div class="tdp-comment-text">${escHtml(c.text)}</div>
+      <button class="tdp-comment-del" data-cid="${c.id}" title="Supprimer">✕</button>
+    </div>`).join('');
+  list.querySelectorAll('.tdp-comment-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteTaskComment(btn.dataset.cid));
+  });
+}
+
+async function addTaskDetailComment() {
+  const input = q('tdp-comment-input');
+  const text = input?.value.trim();
+  if (!text || detailTaskIdx === null) return;
+  const p = proj(); if (!p) return;
+  const task = p.tasks[detailTaskIdx]; if (!task) return;
+  task.comments = task.comments || [];
+  task.comments.push({ id: uid(), text, createdAt: new Date().toISOString() });
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  input.value = '';
+  renderTaskDetailComments(projects.find(pr => pr.id === currentProjectId)?.tasks[detailTaskIdx]);
+}
+
+async function deleteTaskComment(commentId) {
+  if (detailTaskIdx === null) return;
+  const p = proj(); if (!p) return;
+  const task = p.tasks[detailTaskIdx]; if (!task) return;
+  task.comments = (task.comments || []).filter(c => c.id !== commentId);
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  renderTaskDetailComments(projects.find(pr => pr.id === currentProjectId)?.tasks[detailTaskIdx]);
+}
+
+function openTaskModal(idx = null, colId = null, pendingGroupId = null) {
   editingTaskId = idx;
   if (colId) pendingTaskColId = colId;
+  if (pendingGroupId !== null) _pendingGroupId = pendingGroupId;
+  else _pendingGroupId = null;
   const p = proj();
   const task = idx !== null ? (p?.tasks || [])[idx] : null;
   if (task?.colId) pendingTaskColId = task.colId;
@@ -1693,7 +2079,12 @@ async function saveTask() {
     deadline: q('task-deadline').value || null,
     colId: existingTask?.colId || pendingTaskColId || 'col-todo',
     createdAt: existingTask?.createdAt || new Date().toISOString(),
+    // preserve group-related fields
+    ...(existingTask?.isGroup ? { isGroup: true, collapsed: existingTask.collapsed } : {}),
+    ...((existingTask?.groupId || _pendingGroupId) ? { groupId: existingTask?.groupId || _pendingGroupId } : {}),
+    ...(existingTask?.comments ? { comments: existingTask.comments } : {}),
   };
+  _pendingGroupId = null;
   if (editingTaskId !== null) p.tasks[editingTaskId] = task; else p.tasks.push(task);
   p.updatedAt = new Date().toISOString();
   projects = await window.api.saveProject(p);
@@ -1706,7 +2097,9 @@ async function saveTask() {
 async function toggleTask(idx) {
   const p = proj(); if (!p) return;
   const t = p.tasks[idx];
-  t.status = t.status === 'done' ? 'todo' : 'done';
+  const goingDone = t.status !== 'done';
+  t.status = goingDone ? 'done' : 'todo';
+  t.colId = goingDone ? 'col-done' : 'col-todo';
   projects = await window.api.saveProject(p);
   renderTasks(p); renderHome(); renderProjects();
 }
@@ -1716,6 +2109,130 @@ async function removeTask(idx) {
   p.tasks.splice(idx, 1);
   projects = await window.api.saveProject(p);
   renderTasks(p); renderHome(); renderProjects();
+}
+
+// ══ TASK GROUPS ═══════════════════════════════════════════════════════
+let editingGroupIdx = null;
+
+function openTaskGroupModal(colId = null) {
+  editingGroupIdx = null;
+  _pendingGroupColId = colId || pendingTaskColId || 'col-todo';
+  q('tg-modal-title').textContent = 'Nouveau groupe';
+  q('tg-name').value = '';
+  q('tg-btn-save').textContent = 'Créer';
+  openModal('modal-task-group');
+}
+
+function openTaskGroupRenameModal(groupIdx) {
+  const p = proj(); if (!p) return;
+  const g = p.tasks[groupIdx]; if (!g?.isGroup) return;
+  editingGroupIdx = groupIdx;
+  _pendingGroupColId = g.colId || 'col-todo';
+  q('tg-modal-title').textContent = 'Renommer le groupe';
+  q('tg-name').value = g.title;
+  q('tg-btn-save').textContent = 'Enregistrer';
+  openModal('modal-task-group');
+}
+
+let _pendingGroupColId = 'col-todo';
+
+async function saveTaskGroup() {
+  const name = q('tg-name').value.trim();
+  if (!name) { q('tg-name').focus(); return; }
+  const p = proj(); if (!p) return;
+  p.tasks = p.tasks || [];
+  if (editingGroupIdx !== null) {
+    // Rename existing group
+    p.tasks[editingGroupIdx].title = name;
+  } else {
+    // Create new group task
+    p.tasks.push({
+      id: uid(),
+      title: name,
+      isGroup: true,
+      collapsed: false,
+      colId: _pendingGroupColId,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  p.updatedAt = new Date().toISOString();
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  closeModal('modal-task-group');
+  renderTasks(proj());
+}
+
+async function toggleGroupCollapse(groupIdx) {
+  const p = proj(); if (!p) return;
+  const g = p.tasks[groupIdx]; if (!g?.isGroup) return;
+  g.collapsed = !g.collapsed;
+  projects = await window.api.saveProject(p);
+  renderTasks(p);
+}
+
+async function dissolveGroup(groupIdx) {
+  const p = proj(); if (!p) return;
+  const g = p.tasks[groupIdx]; if (!g?.isGroup) return;
+  // Detach children (keep them as regular tasks in the same column)
+  p.tasks.forEach(t => { if (t.groupId === g.id) delete t.groupId; });
+  // Convert the group task itself to a regular task
+  delete g.isGroup;
+  delete g.collapsed;
+  p.updatedAt = new Date().toISOString();
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  renderTasks(p);
+}
+
+function openPickGroupModal(taskIdx) {
+  const p = proj(); if (!p) return;
+  const t = p.tasks[taskIdx]; if (!t) return;
+  const colId = t.colId || 'col-todo';
+  // List groups in the same column
+  const groups = p.tasks
+    .map((g, i) => ({ g, i }))
+    .filter(({ g }) => g.isGroup && (g.colId || 'col-todo') === colId);
+  const list = q('pick-group-list');
+  if (!groups.length) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun groupe dans cette colonne.<br><br>Créez d\'abord un groupe via le bouton <strong>📁 Groupe</strong> dans la toolbar.</div>';
+  } else {
+    list.innerHTML = groups.map(({ g, i }) => `
+      <button class="pick-group-item" data-group-id="${g.id}" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--rsm);background:var(--bg3);cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text);transition:all var(--t)">
+        <span>📁</span> <span>${escHtml(g.title)}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text3)">${p.tasks.filter(x => x.groupId === g.id).length} tâche(s)</span>
+      </button>`).join('');
+    list.querySelectorAll('.pick-group-item').forEach(btn => {
+      btn.addEventListener('mouseover', () => { btn.style.borderColor = 'var(--accent)'; btn.style.background = 'var(--accent-bg)'; });
+      btn.addEventListener('mouseout', () => { btn.style.borderColor = 'var(--border)'; btn.style.background = 'var(--bg3)'; });
+      btn.addEventListener('click', async () => {
+        await addTaskToGroup(taskIdx, btn.dataset.groupId);
+        closeModal('modal-pick-group');
+      });
+    });
+  }
+  openModal('modal-pick-group');
+}
+
+async function addTaskToGroup(taskIdx, groupId) {
+  const p = proj(); if (!p) return;
+  const t = p.tasks[taskIdx]; if (!t || t.isGroup) return;
+  const g = p.tasks.find(x => x.id === groupId); if (!g) return;
+  t.groupId = groupId;
+  t.colId = g.colId || t.colId; // align with group's column
+  p.updatedAt = new Date().toISOString();
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  renderTasks(p);
+}
+
+async function removeTaskFromGroup(taskIdx) {
+  const p = proj(); if (!p) return;
+  const t = p.tasks[taskIdx]; if (!t) return;
+  delete t.groupId;
+  p.updatedAt = new Date().toISOString();
+  projects = await window.api.saveProject(p);
+  scheduleSync();
+  renderTasks(p);
 }
 
 // ══ TASK COLUMNS ══════════════════════════════════════════════════════
@@ -2312,15 +2829,25 @@ function showCtxMenu(e, type, data) {
   const isResource = type === 'resource';
   const isGroup = type === 'group';
   const isProject = type === 'project';
+  const isTask = type === 'task';
+  const isTaskGroup = type === 'task-group';
   qAll('.ctx-resource-item').forEach(el => el.style.display = isResource ? '' : 'none');
   qAll('.ctx-group-item').forEach(el => el.style.display = isGroup ? '' : 'none');
   qAll('.ctx-proj-item').forEach(el => el.style.display = isProject ? '' : 'none');
+  qAll('.ctx-task-item').forEach(el => el.style.display = isTask ? '' : 'none');
+  qAll('.ctx-taskgroup-item').forEach(el => el.style.display = isTaskGroup ? '' : 'none');
   if (isResource) {
     q('ctx-open-folder').style.display = data.type === 'file' ? '' : 'none';
     q('ctx-rename').style.display = '';
   } else {
     q('ctx-open-folder').style.display = 'none';
     q('ctx-rename').style.display = 'none';
+  }
+  // Show/hide "Retirer du groupe" depending on whether task is in a group
+  if (isTask) {
+    const p = proj();
+    const t = p?.tasks?.[data.idx];
+    q('ctx-task-remove-group').style.display = t?.groupId ? '' : 'none';
   }
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
