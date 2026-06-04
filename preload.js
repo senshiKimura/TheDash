@@ -64,5 +64,8 @@ contextBridge.exposeInMainWorld('api', {
   veilleSaveArchiveSettings: (s) => ipcRenderer.invoke('veille-save-archive-settings', s),
   veilleRunArchiveCleanup: () => ipcRenderer.invoke('veille-run-archive-cleanup'),
   veilleToggleFavorite: (id) => ipcRenderer.invoke('veille-toggle-favorite', id),
+  calFetchIcs: (data) => ipcRenderer.invoke('cal-fetch-ics', data),
+  calGetSubscriptions: () => ipcRenderer.invoke('cal-get-subscriptions'),
+  calSaveSubscriptions: (subs) => ipcRenderer.invoke('cal-save-subscriptions', subs),
 });
 
