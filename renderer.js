@@ -2371,19 +2371,47 @@ function renderColsModal() {
   const cols = getTaskCols(p);
   const list = q('task-cols-list');
   if (!list) return;
-  const defaultIds = new Set(['col-todo', 'col-inprog', 'col-done']);
-  list.innerHTML = cols.map(col => {
+  list.innerHTML = cols.map((col, idx) => {
     const count = (p.tasks || []).filter(t => (t.colId || 'col-todo') === col.id).length;
-    const isDefault = defaultIds.has(col.id);
-    return `<div class="col-manage-item">
+    const canDel = cols.length > 1;
+    return `<div class="col-manage-item" draggable="true" data-col-id="${col.id}" data-col-idx="${idx}">
+      <span class="col-manage-drag" title="Déplacer">⠿</span>
       <span class="col-manage-dot" style="background:${col.color}"></span>
       <span class="col-manage-name">${escHtml(col.name)}</span>
       <span class="col-manage-count">${count} tâche${count !== 1 ? 's' : ''}</span>
-      <button class="col-manage-del" data-col="${col.id}" title="${isDefault ? 'Colonne par défaut' : 'Supprimer'}" ${isDefault ? 'disabled' : ''}>✕</button>
+      <button class="col-manage-del" data-col="${col.id}" title="${canDel ? 'Supprimer' : 'Dernière colonne'}" ${canDel ? '' : 'disabled'}>✕</button>
     </div>`;
   }).join('');
+
+  // Delete buttons
   list.querySelectorAll('.col-manage-del:not([disabled])').forEach(btn => {
     btn.addEventListener('click', () => deleteTaskCol(btn.dataset.col));
+  });
+
+  // Drag to reorder columns
+  let dragSrcIdx = null;
+  list.querySelectorAll('.col-manage-item').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      dragSrcIdx = parseInt(item.dataset.colIdx);
+      item.classList.add('col-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => item.classList.remove('col-dragging'));
+    item.addEventListener('dragover', (e) => { e.preventDefault(); item.classList.add('col-drag-over'); });
+    item.addEventListener('dragleave', () => item.classList.remove('col-drag-over'));
+    item.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      item.classList.remove('col-drag-over');
+      const destIdx = parseInt(item.dataset.colIdx);
+      if (dragSrcIdx === null || dragSrcIdx === destIdx) return;
+      const p2 = proj(); if (!p2) return;
+      if (!p2.taskColumns?.length) p2.taskColumns = [...getTaskCols(p2)];
+      const [moved] = p2.taskColumns.splice(dragSrcIdx, 1);
+      p2.taskColumns.splice(destIdx, 0, moved);
+      projects = await window.api.saveProject(p2);
+      renderColsModal();
+      renderTasks(projects.find(pr => pr.id === currentProjectId));
+    });
   });
 }
 
